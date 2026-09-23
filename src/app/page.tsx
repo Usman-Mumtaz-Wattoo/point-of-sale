@@ -11,6 +11,26 @@ export default function HomePage() {
         <p className="text-sm text-slate-400">
           Foundation initialized successfully.
         </p>
+        <div className="pt-4 flex items-center justify-center gap-3">
+          <a
+            href="/login"
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+          >
+            Sign In
+          </a>
+          <a
+            href="/signup"
+            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+          >
+            Sign Up
+          </a>
+          <a
+            href="/dashboard"
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium border border-slate-800 transition-colors"
+          >
+            Dashboard
+          </a>
+        </div>
       </div>
     </main>
   );

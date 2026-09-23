@@ -86,15 +86,16 @@ model BranchSettings {
 }
 
 model User {
-  id          String                   @id @default(cuid())
-  email       String                   @unique
-  name        String
-  avatarUrl   String?
-  isActive    Boolean                  @default(true)
-  createdAt   DateTime                 @default(now())
-  updatedAt   DateTime                 @updatedAt
+  id             String                   @id @default(cuid())
+  supabaseAuthId String?                  @unique
+  email          String                   @unique
+  name           String
+  avatarUrl      String?
+  isActive       Boolean                  @default(true)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
 
-  memberships OrganizationMembership[]
+  memberships    OrganizationMembership[]
 
   @@index([email])
   @@index([isActive])
