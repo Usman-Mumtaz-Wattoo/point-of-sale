@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model HealthCheck {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+}
+
+model Organization {
+  id          String                @id @default(cuid())
+  name        String
+  slug        String                @unique
+  legalName   String?
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  country     String?
+  currency    String                @default("USD")
+  timezone    String                @default("UTC")
+  logoUrl     String?
+  isActive    Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  branches    Branch[]
+  settings    OrganizationSettings?
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model Branch {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  address        String?
+  city           String?
+  phone          String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  settings       BranchSettings?
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+model OrganizationSettings {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  currency       String       @default("USD")
+  timezone       String       @default("UTC")
+  dateFormat     String       @default("YYYY-MM-DD")
+  invoicePrefix  String       @default("INV-")
+  receiptPrefix  String       @default("REC-")
+  taxEnabled     Boolean      @default(false)
+  defaultTaxRate Decimal      @default(0.00) @db.Decimal(5, 2)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model BranchSettings {
+  id                   String   @id @default(cuid())
+  branchId             String   @unique
+  invoiceNumberPrefix  String?
+  receiptNumberPrefix  String?
+  defaultWarehouseName String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  branch               Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
