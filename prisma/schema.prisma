@@ -29,6 +29,7 @@ model Organization {
   updatedAt   DateTime              @updatedAt
 
   branches    Branch[]
+  memberships OrganizationMembership[]
   settings    OrganizationSettings?
 
   @@index([name])
@@ -36,18 +37,19 @@ model Organization {
 }
 
 model Branch {
-  id             String          @id @default(cuid())
+  id             String             @id @default(cuid())
   organizationId String
   name           String
   code           String
   address        String?
   city           String?
   phone          String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  memberships    BranchMembership[]
   settings       BranchSettings?
 
   @@unique([organizationId, code])
@@ -81,4 +83,65 @@ model BranchSettings {
   updatedAt            DateTime @updatedAt
 
   branch               Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id          String                   @id @default(cuid())
+  email       String                   @unique
+  name        String
+  avatarUrl   String?
+  isActive    Boolean                  @default(true)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  memberships OrganizationMembership[]
+
+  @@index([email])
+  @@index([isActive])
+}
+
+model Role {
+  id          String                   @id @default(cuid())
+  name        String                   @unique
+  description String?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  memberships OrganizationMembership[]
+}
+
+model OrganizationMembership {
+  id                String             @id @default(cuid())
+  userId            String
+  organizationId    String
+  roleId            String
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  role              Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  branchMemberships BranchMembership[]
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([roleId])
+  @@index([organizationId, isActive])
+}
+
+model BranchMembership {
+  id                       String                 @id @default(cuid())
+  organizationMembershipId String
+  branchId                 String
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+
+  organizationMembership   OrganizationMembership @relation(fields: [organizationMembershipId], references: [id], onDelete: Cascade)
+  branch                   Branch                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationMembershipId, branchId])
+  @@index([organizationMembershipId])
+  @@index([branchId])
 }
