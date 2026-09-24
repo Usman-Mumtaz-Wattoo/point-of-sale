@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { signOutAction } from "@/app/auth/actions";
 
@@ -54,22 +55,35 @@ export default async function DashboardPage() {
             <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
               Tenant Memberships ({membershipCount})
             </h2>
+            {membershipCount > 0 && (
+              <Link
+                href="/onboarding"
+                className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                + Register Another Business
+              </Link>
+            )}
           </div>
 
           {membershipCount === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center space-y-3">
-              <div className="w-10 h-10 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto text-lg">
+            <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-xl border border-emerald-500/20">
                 🏢
               </div>
-              <h3 className="text-base font-medium text-white">No Organization Yet</h3>
-              <p className="text-sm text-slate-400 max-w-md mx-auto">
-                Your account is verified, but you are not yet a member of any organization.
-                Organization creation and team onboarding will be available in future steps.
-              </p>
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-white">Create Your First Business</h3>
+                <p className="text-sm text-slate-400 max-w-md mx-auto">
+                  You are verified but do not belong to any business yet. Set up your organization
+                  and primary branch to launch your Point of Sale operations.
+                </p>
+              </div>
               <div className="pt-2">
-                <span className="inline-block px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                  Onboarding placeholder (Step 7)
-                </span>
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors shadow-lg shadow-emerald-950/40"
+                >
+                  Create Business &rarr;
+                </Link>
               </div>
             </div>
           ) : (
