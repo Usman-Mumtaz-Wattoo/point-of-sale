@@ -706,6 +706,126 @@ export async function recordOpeningBalance(params: {
   });
 }
 
+export interface ApplyStockInflowTransactionParams {
+  organizationId: string;
+  branchId: string;
+  productId: string;
+  variantId?: string | null;
+  quantity: number | string | Prisma.Decimal;
+  movementType: "PURCHASE_RECEIPT" | "SALE_RETURN" | "ADJUSTMENT_IN" | "TRANSFER_IN";
+  referenceType?: string | null;
+  referenceId?: string | null;
+  reason?: string | null;
+  notes?: string | null;
+  performedByUserId?: string | null;
+}
+
+/**
+ * Internal transaction-aware helper to apply an inventory inflow mutation.
+ * Executes on an existing Prisma transaction client (tx).
+ * NEVER calls db.$transaction() or manages transaction lifecycles on its own.
+ *
+ * Designed to participate atomically in outer business transactions (e.g. Purchase Receiving).
+ * Assumes authorization, tenant boundaries, and product/variant validity have been resolved.
+ */
+export async function applyStockInflowTransaction(
+  tx: Prisma.TransactionClient,
+  params: ApplyStockInflowTransactionParams
+): Promise<StockMutationResult> {
+  const validInflowTypes: readonly string[] = [
+    "PURCHASE_RECEIPT",
+    "SALE_RETURN",
+    "ADJUSTMENT_IN",
+    "TRANSFER_IN",
+  ];
+  if (!validInflowTypes.includes(params.movementType)) {
+    throw new InventoryValidationError(
+      `Invalid inflow movement type "${params.movementType}". Expected one of: ${validInflowTypes.join(", ")}.`
+    );
+  }
+
+  const { organizationId, branchId, productId } = params;
+  if (!organizationId || !branchId || !productId) {
+    throw new InventoryValidationError("organizationId, branchId, and productId are required for stock inflow.");
+  }
+
+  const variantId = params.variantId?.trim() || null;
+  const deltaMagnitude = parseQuantity(params.quantity, "Inflow Quantity", false);
+
+  // Concurrency lock on reference if provided (Idempotency protection)
+  const refType = params.referenceType?.trim() || null;
+  const refId = params.referenceId?.trim() || null;
+  if (refType && refId) {
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtext(${organizationId}), hashtext(${`ref_${refType}_${refId}`}))
+    `;
+    const existing = await tx.inventoryMovement.findFirst({
+      where: {
+        organizationId,
+        referenceType: refType,
+        referenceId: refId,
+      },
+    });
+    if (existing) {
+      // Return existing stock and movement idempotently
+      const currentStock = await tx.inventoryStock.findFirst({
+        where: {
+          branchId,
+          productId,
+          variantId,
+        },
+      });
+      if (!currentStock) {
+        throw new InventoryNotFoundError("Associated stock record not found for idempotent reference.");
+      }
+      return { stock: currentStock, movement: existing };
+    }
+  }
+
+  // Lock and fetch current stock (acquires advisory lock on branch+item, and SELECT FOR UPDATE if row exists)
+  const existingStock = await lockAndFetchStockRecord(tx, branchId, productId, variantId);
+  const quantityBefore = existingStock ? new Prisma.Decimal(existingStock.quantity) : new Prisma.Decimal("0.000");
+  const quantityAfter = quantityBefore.add(deltaMagnitude);
+
+  let stock;
+  if (!existingStock) {
+    stock = await tx.inventoryStock.create({
+      data: {
+        organizationId,
+        branchId,
+        productId,
+        variantId,
+        quantity: quantityAfter,
+      },
+    });
+  } else {
+    stock = await tx.inventoryStock.update({
+      where: { id: existingStock.id },
+      data: { quantity: quantityAfter },
+    });
+  }
+
+  const movement = await tx.inventoryMovement.create({
+    data: {
+      organizationId,
+      branchId,
+      productId,
+      variantId,
+      movementType: params.movementType as StockMovementType,
+      quantityDelta: deltaMagnitude,
+      quantityBefore,
+      quantityAfter,
+      referenceType: refType,
+      referenceId: refId,
+      reason: params.reason?.trim() || null,
+      notes: params.notes?.trim() || null,
+      performedByUserId: params.performedByUserId ?? null,
+    },
+  });
+
+  return { stock, movement };
+}
+
 /**
  * Records an inventory inflow (PURCHASE_RECEIPT, SALE_RETURN, ADJUSTMENT_IN, TRANSFER_IN).
  * Increases stock balance and writes a positive movement record atomically.
@@ -749,75 +869,23 @@ export async function recordStockInflow(params: {
     variantId: params.variantId,
   });
 
-  const deltaMagnitude = parseQuantity(params.quantity, "Inflow Quantity", false);
+  // Validate quantity early before opening transaction
+  parseQuantity(params.quantity, "Inflow Quantity", false);
 
   return db.$transaction(async (tx) => {
-    // Concurrency lock on reference if provided (Idempotency protection)
-    if (params.referenceType && params.referenceId) {
-      await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(hashtext(${organizationId}), hashtext(${`ref_${params.referenceType}_${params.referenceId}`}))
-      `;
-      const existing = await tx.inventoryMovement.findFirst({
-        where: {
-          organizationId,
-          referenceType: params.referenceType,
-          referenceId: params.referenceId,
-        },
-      });
-      if (existing) {
-        // Return existing stock and movement idempotently
-        const currentStock = await tx.inventoryStock.findFirst({
-          where: { branchId, productId: params.productId, variantId: variantId ?? undefined },
-        });
-        if (!currentStock) {
-          throw new InventoryNotFoundError("Associated stock record not found for idempotent reference.");
-        }
-        return { stock: currentStock, movement: existing };
-      }
-    }
-
-    // Lock and fetch current stock
-    const existingStock = await lockAndFetchStockRecord(tx, branchId, params.productId, variantId);
-    const quantityBefore = existingStock ? new Prisma.Decimal(existingStock.quantity) : new Prisma.Decimal("0.000");
-    const quantityAfter = quantityBefore.add(deltaMagnitude);
-
-    let stock;
-    if (!existingStock) {
-      stock = await tx.inventoryStock.create({
-        data: {
-          organizationId,
-          branchId,
-          productId: params.productId,
-          variantId,
-          quantity: quantityAfter,
-        },
-      });
-    } else {
-      stock = await tx.inventoryStock.update({
-        where: { id: existingStock.id },
-        data: { quantity: quantityAfter },
-      });
-    }
-
-    const movement = await tx.inventoryMovement.create({
-      data: {
-        organizationId,
-        branchId,
-        productId: params.productId,
-        variantId,
-        movementType: params.movementType as StockMovementType,
-        quantityDelta: deltaMagnitude,
-        quantityBefore,
-        quantityAfter,
-        referenceType: params.referenceType?.trim() || null,
-        referenceId: params.referenceId?.trim() || null,
-        reason: params.reason?.trim() || null,
-        notes: params.notes?.trim() || null,
-        performedByUserId: user.id,
-      },
+    return applyStockInflowTransaction(tx, {
+      organizationId,
+      branchId,
+      productId: params.productId,
+      variantId,
+      quantity: params.quantity,
+      movementType: params.movementType,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      reason: params.reason,
+      notes: params.notes,
+      performedByUserId: user.id,
     });
-
-    return { stock, movement };
   });
 }
 
