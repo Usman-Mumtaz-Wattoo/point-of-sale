@@ -101,13 +101,19 @@ export default async function DashboardPage() {
                       Slug: {membership.organization.slug}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <span className="px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                       {membership.role.name}
                     </span>
                     <span className="text-xs text-slate-500">
                       {membership.branchMemberships.length} branch access
                     </span>
+                    <Link
+                      href={`/catalog?org=${membership.organizationId}`}
+                      className="px-3 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+                    >
+                      Catalog &rarr;
+                    </Link>
                   </div>
                 </div>
               ))}
