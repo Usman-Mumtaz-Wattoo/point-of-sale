@@ -130,6 +130,14 @@ export default async function DashboardPage() {
                         POS &rarr;
                       </Link>
                     )}
+                    {membership.role.name !== "INVENTORY_MANAGER" && (
+                      <Link
+                        href={`/sales/returns?org=${membership.organizationId}`}
+                        className="px-3 py-1 rounded text-xs font-medium bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors font-semibold"
+                      >
+                        Returns &rarr;
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}
