@@ -51,6 +51,13 @@ export class SaleReturnValidationError extends SaleReturnError {
   }
 }
 
+export class SaleReturnDuplicateItemError extends SaleReturnValidationError {
+  constructor(message: string) {
+    super(message);
+    this.name = "SaleReturnDuplicateItemError";
+  }
+}
+
 export class SaleReturnNotFoundError extends SaleReturnError {
   constructor(message = "Sale return not found.") {
     super(message);
@@ -71,6 +78,8 @@ export class SaleReturnOverReturnError extends SaleReturnError {
     this.name = "SaleReturnOverReturnError";
   }
 }
+export const SaleReturnQuantityExceededError = SaleReturnOverReturnError;
+export type SaleReturnQuantityExceededError = SaleReturnOverReturnError;
 
 export class SaleRefundCeilingExceededError extends SaleReturnError {
   constructor(message: string) {
@@ -531,6 +540,119 @@ export function computeSaleReturnRequestHash(input: CreateSaleReturnInput): stri
 }
 
 // ============================================================================
+// FINANCIAL CALCULATION & ORDER DISCOUNT ALLOCATION ENGINE
+// ============================================================================
+
+export interface SaleLineFinancialCeiling {
+  saleItemId: string;
+  qtySold: Prisma.Decimal;
+  subtotal: Prisma.Decimal;
+  itemDiscount: Prisma.Decimal;
+  allocatedOrderDiscount: Prisma.Decimal;
+  totalDiscount: Prisma.Decimal;
+  taxAmount: Prisma.Decimal;
+  lineTotal: Prisma.Decimal;
+  fullRefundableLineAmount: Prisma.Decimal;
+}
+
+/**
+ * Deterministically allocates order-level discount across ALL original sale items
+ * based on each line's net taxable base (subtotal - itemDiscount).
+ *
+ * In sales.ts:
+ * - Line taxes are calculated on taxable amount (subtotal - itemDiscount).
+ * - Order discount is applied separately after tax against order total (non-tax-affecting).
+ * - Full refundable line ceiling: lineTotal - allocatedOrderDiscount.
+ * - Invariant: sum(fullRefundableLineAmount) === Sale.totalAmount.
+ * - Invariant for each line: subtotal - totalDiscount + taxAmount === fullRefundableLineAmount.
+ */
+export function calculateSaleLineCeilings(
+  sale: { discountAmount: Prisma.Decimal.Value },
+  allItems: Array<{
+    id: string;
+    quantity: Prisma.Decimal.Value;
+    subtotal: Prisma.Decimal.Value;
+    discountAmount: Prisma.Decimal.Value;
+    taxAmount: Prisma.Decimal.Value;
+    lineTotal: Prisma.Decimal.Value;
+  }>
+): Map<string, SaleLineFinancialCeiling> {
+  const result = new Map<string, SaleLineFinancialCeiling>();
+  if (allItems.length === 0) return result;
+
+  // Ensure deterministic ordering by item id ascending
+  const sorted = [...allItems].sort((a, b) => a.id.localeCompare(b.id));
+
+  const totalSaleDiscount = new Prisma.Decimal(sale.discountAmount);
+  const sumItemDiscounts = sorted.reduce(
+    (acc, it) => acc.add(new Prisma.Decimal(it.discountAmount)),
+    new Prisma.Decimal("0.00")
+  );
+
+  const orderDiscount = totalSaleDiscount.greaterThan(sumItemDiscounts)
+    ? totalSaleDiscount.minus(sumItemDiscounts)
+    : new Prisma.Decimal("0.00");
+
+  const lineNetBases = sorted.map((it) => {
+    const sub = new Prisma.Decimal(it.subtotal);
+    const disc = new Prisma.Decimal(it.discountAmount);
+    const net = sub.greaterThan(disc) ? sub.minus(disc) : new Prisma.Decimal("0.00");
+    return { item: it, netBase: net };
+  });
+
+  const totalNetBase = lineNetBases.reduce(
+    (acc, it) => acc.add(it.netBase),
+    new Prisma.Decimal("0.00")
+  );
+
+  let accumulatedOrderDiscount = new Prisma.Decimal("0.00");
+
+  for (let i = 0; i < lineNetBases.length; i++) {
+    const { item, netBase } = lineNetBases[i];
+    const qtySold = new Prisma.Decimal(item.quantity);
+    const subtotal = new Prisma.Decimal(item.subtotal);
+    const itemDiscount = new Prisma.Decimal(item.discountAmount);
+    const taxAmount = new Prisma.Decimal(item.taxAmount);
+    const lineTotal = new Prisma.Decimal(item.lineTotal);
+
+    let allocatedOrderDisc: Prisma.Decimal;
+    if (orderDiscount.greaterThan(0) && totalNetBase.greaterThan(0)) {
+      if (i === lineNetBases.length - 1) {
+        // Last line absorbs rounding residual
+        allocatedOrderDisc = orderDiscount.minus(accumulatedOrderDiscount);
+      } else {
+        allocatedOrderDisc = orderDiscount
+          .times(netBase)
+          .dividedBy(totalNetBase)
+          .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+        accumulatedOrderDiscount = accumulatedOrderDiscount.add(allocatedOrderDisc);
+      }
+    } else {
+      allocatedOrderDisc = new Prisma.Decimal("0.00");
+    }
+
+    const totalDiscount = itemDiscount.add(allocatedOrderDisc);
+    const fullRefundableLineAmount = lineTotal.minus(allocatedOrderDisc);
+
+    result.set(item.id, {
+      saleItemId: item.id,
+      qtySold,
+      subtotal,
+      itemDiscount,
+      allocatedOrderDiscount: allocatedOrderDisc,
+      totalDiscount,
+      taxAmount,
+      lineTotal,
+      fullRefundableLineAmount: fullRefundableLineAmount.greaterThan(0)
+        ? fullRefundableLineAmount
+        : new Prisma.Decimal("0.00"),
+    });
+  }
+
+  return result;
+}
+
+// ============================================================================
 // MUTATION SERVICES
 // ============================================================================
 
@@ -603,7 +725,7 @@ export async function createSaleReturn(
     }
     const cleanItemId = item.saleItemId.trim();
     if (seenSaleItemIds.has(cleanItemId)) {
-      throw new SaleReturnValidationError(
+      throw new SaleReturnDuplicateItemError(
         `Duplicate sale item ID "${cleanItemId}" in return request. Each item can only be returned once per return.`
       );
     }
@@ -634,9 +756,10 @@ export async function createSaleReturn(
   }
 
   // 3. Execute atomic transaction
-  return db.$transaction(
-    async (tx) => {
-      // 3a. Lock Sale row for update
+  try {
+    return await db.$transaction(
+      async (tx) => {
+        // 3a. Lock Sale row for update
       const rawSales = await tx.$queryRaw<
         {
           id: string;
@@ -743,6 +866,7 @@ export async function createSaleReturn(
         orderBy: { id: "asc" },
         select: {
           id: true,
+          quantity: true,
           subtotal: true,
           discountAmount: true,
           lineTotal: true,
@@ -750,63 +874,7 @@ export async function createSaleReturn(
         },
       });
 
-      const sumItemDiscounts = allSaleItems.reduce(
-        (acc, item) => acc.add(new Prisma.Decimal(item.discountAmount)),
-        new Prisma.Decimal("0.00")
-      );
-      const totalSaleDiscount = new Prisma.Decimal(lockedSale.discountAmount);
-      const orderDiscount = totalSaleDiscount.greaterThan(sumItemDiscounts)
-        ? totalSaleDiscount.minus(sumItemDiscounts)
-        : new Prisma.Decimal("0.00");
-
-      // Compute taxable/net bases for all items: Vi = subtotal - lineDiscount
-      const itemNetBases = allSaleItems.map((item) => {
-        const sub = new Prisma.Decimal(item.subtotal);
-        const disc = new Prisma.Decimal(item.discountAmount);
-        const netBase = sub.greaterThan(disc) ? sub.minus(disc) : new Prisma.Decimal("0.00");
-        return { id: item.id, netBase, lineTotal: new Prisma.Decimal(item.lineTotal) };
-      });
-
-      const totalNetBase = itemNetBases.reduce(
-        (acc, item) => acc.add(item.netBase),
-        new Prisma.Decimal("0.00")
-      );
-
-      // Allocate order discount across all items deterministically
-      const lineOrderDiscountMap = new Map<string, Prisma.Decimal>();
-      const lineTotalRefundableMap = new Map<string, Prisma.Decimal>();
-
-      if (orderDiscount.greaterThan(0) && totalNetBase.greaterThan(0)) {
-        let allocatedOrderDiscount = new Prisma.Decimal("0.00");
-
-        for (let i = 0; i < itemNetBases.length; i++) {
-          const item = itemNetBases[i];
-          let share: Prisma.Decimal;
-
-          if (i === itemNetBases.length - 1) {
-            // Final residual item absorbs rounding remainder
-            share = orderDiscount.minus(allocatedOrderDiscount);
-          } else {
-            share = orderDiscount
-              .times(item.netBase)
-              .dividedBy(totalNetBase)
-              .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-            allocatedOrderDiscount = allocatedOrderDiscount.add(share);
-          }
-
-          lineOrderDiscountMap.set(item.id, share);
-          const totalRefundable = item.lineTotal.minus(share);
-          lineTotalRefundableMap.set(
-            item.id,
-            totalRefundable.greaterThan(0) ? totalRefundable : new Prisma.Decimal("0.00")
-          );
-        }
-      } else {
-        for (const item of itemNetBases) {
-          lineOrderDiscountMap.set(item.id, new Prisma.Decimal("0.00"));
-          lineTotalRefundableMap.set(item.id, item.lineTotal);
-        }
-      }
+      const lineCeilingsMap = calculateSaleLineCeilings(lockedSale, allSaleItems);
 
       // 3e. Deterministic lock ordering: sort items lexicographically by saleItemId
       const sortedItems = [...sanitizedItems].sort((a, b) =>
@@ -884,87 +952,78 @@ export async function createSaleReturn(
           );
         }
 
-        const qtySold = new Prisma.Decimal(lockedItem.quantity);
+        const ceiling = lineCeilingsMap.get(lockedItem.id);
+        if (!ceiling) {
+          throw new SaleReturnValidationError(
+            `Sale item "${reqItem.saleItemId}" does not belong to sale "${lockedSale.invoiceNumber}".`
+          );
+        }
+
+        const qtySold = ceiling.qtySold;
         const qtyAlreadyReturned = new Prisma.Decimal(lockedItem.quantityReturned);
         const amountAlreadyReturned = new Prisma.Decimal(lockedItem.amountReturned);
         const remainingQty = qtySold.minus(qtyAlreadyReturned);
 
         if (reqItem.quantityReturned.greaterThan(remainingQty)) {
-          throw new SaleReturnOverReturnError(
+          throw new SaleReturnQuantityExceededError(
             `Return quantity (${reqItem.quantityReturned.toString()}) exceeds remaining returnable quantity (${remainingQty.toString()}) ` +
             `for sale item "${lockedItem.id}". Total Sold: ${qtySold.toString()}, Already Returned: ${qtyAlreadyReturned.toString()}.`
           );
         }
 
         const qtyNew = qtyAlreadyReturned.add(reqItem.quantityReturned);
-        const totalRefundableForLine =
-          lineTotalRefundableMap.get(lockedItem.id) ?? new Prisma.Decimal(lockedItem.lineTotal);
-        const unitPrice = new Prisma.Decimal(lockedItem.unitPrice);
-        const unitCost = new Prisma.Decimal(lockedItem.unitCost);
-        const itemLineDiscount = new Prisma.Decimal(lockedItem.discountAmount);
-        const orderLineDiscount =
-          lineOrderDiscountMap.get(lockedItem.id) ?? new Prisma.Decimal("0.00");
-        const totalLineDiscount = itemLineDiscount.add(orderLineDiscount);
+        const isFinalReturn = qtyNew.equals(qtySold);
 
-        let lineDiscountRet: Prisma.Decimal;
+        let lineSubtotalRet: Prisma.Decimal;
         let lineTaxRet: Prisma.Decimal;
+        let lineDiscountRet: Prisma.Decimal;
         let lineTotalRet: Prisma.Decimal;
 
-        const lineSubtotalRet = reqItem.quantityReturned
-          .times(unitPrice)
-          .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+        if (isFinalReturn) {
+          // FINAL RETURN: Exact residual formulas absorbing all prior cent rounding!
+          lineTotalRet = ceiling.fullRefundableLineAmount.minus(amountAlreadyReturned);
 
-        if (qtyNew.equals(qtySold)) {
-          // Final return of remaining quantity: absorbs residual rounding difference
-          lineTotalRet = totalRefundableForLine.minus(amountAlreadyReturned);
-
-          // Calculate prior returned discounts for this line
+          // Fetch prior returned components for this line to calculate exact residuals
           const priorReturns = await tx.saleReturnItem.findMany({
             where: { saleItemId: lockedItem.id },
-            select: { discountAmount: true },
+            select: { subtotal: true, discountAmount: true, taxAmount: true },
           });
+          const priorReturnedSubtotal = priorReturns.reduce(
+            (acc, r) => acc.add(new Prisma.Decimal(r.subtotal)),
+            new Prisma.Decimal("0.00")
+          );
           const priorReturnedDiscount = priorReturns.reduce(
-            (acc, ret) => acc.add(new Prisma.Decimal(ret.discountAmount)),
+            (acc, r) => acc.add(new Prisma.Decimal(r.discountAmount)),
+            new Prisma.Decimal("0.00")
+          );
+          const priorReturnedTax = priorReturns.reduce(
+            (acc, r) => acc.add(new Prisma.Decimal(r.taxAmount)),
             new Prisma.Decimal("0.00")
           );
 
-          let discResidual = totalLineDiscount.minus(priorReturnedDiscount);
-          if (discResidual.lessThan(0)) discResidual = new Prisma.Decimal("0.00");
-          if (discResidual.greaterThan(lineSubtotalRet)) discResidual = lineSubtotalRet;
-          lineDiscountRet = discResidual;
+          lineSubtotalRet = ceiling.subtotal.minus(priorReturnedSubtotal);
+          lineTaxRet = ceiling.taxAmount.minus(priorReturnedTax);
+          lineDiscountRet = ceiling.totalDiscount.minus(priorReturnedDiscount);
 
-          const taxableRet = lineSubtotalRet.minus(lineDiscountRet);
-          lineTaxRet = lineTotalRet.minus(taxableRet);
-          if (lineTaxRet.lessThan(0)) {
-            lineTaxRet = new Prisma.Decimal("0.00");
+          // Invariant verification and balance: lineTotal = subtotal - discount + tax
+          const balanceDiff = lineSubtotalRet.minus(lineDiscountRet).plus(lineTaxRet).minus(lineTotalRet);
+          if (!balanceDiff.isZero()) {
+            lineDiscountRet = lineDiscountRet.plus(balanceDiff);
           }
-          // Re-balance identity: lineTotal = subtotal - discount + tax
-          lineTotalRet = lineSubtotalRet.minus(lineDiscountRet).plus(lineTaxRet);
         } else {
-          // Proportional partial return
-          const returnRatio = reqItem.quantityReturned.dividedBy(qtySold);
-          lineTotalRet = totalRefundableForLine
-            .times(returnRatio)
+          // PARTIAL RETURN: Proportional formulas based on the fixed line ceilings
+          const ratio = reqItem.quantityReturned.dividedBy(qtySold);
+          lineTotalRet = ceiling.fullRefundableLineAmount
+            .times(ratio)
             .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-
-          const propItemDisc = itemLineDiscount
-            .times(returnRatio)
+          lineSubtotalRet = ceiling.subtotal
+            .times(ratio)
             .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-          const propOrderDisc = orderLineDiscount
-            .times(returnRatio)
+          lineTaxRet = ceiling.taxAmount
+            .times(ratio)
             .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-          let propTotalDisc = propItemDisc.add(propOrderDisc);
-          if (propTotalDisc.greaterThan(lineSubtotalRet)) {
-            propTotalDisc = lineSubtotalRet;
-          }
-          lineDiscountRet = propTotalDisc;
-
-          const taxableRet = lineSubtotalRet.minus(lineDiscountRet);
-          lineTaxRet = lineTotalRet.minus(taxableRet);
-          if (lineTaxRet.lessThan(0)) {
-            lineTaxRet = new Prisma.Decimal("0.00");
-          }
-          lineTotalRet = lineSubtotalRet.minus(lineDiscountRet).plus(lineTaxRet);
+          // Discount satisfies exact identity: lineTotal = subtotal - discount + tax
+          lineDiscountRet = lineSubtotalRet.minus(lineTotalRet).plus(lineTaxRet);
         }
 
         sumReturnSubtotal = sumReturnSubtotal.add(lineSubtotalRet);
@@ -979,8 +1038,8 @@ export async function createSaleReturn(
           productName: lockedItem.productName,
           productSku: lockedItem.productSku,
           quantityReturned: reqItem.quantityReturned,
-          unitPrice,
-          unitCost,
+          unitPrice: new Prisma.Decimal(lockedItem.unitPrice),
+          unitCost: new Prisma.Decimal(lockedItem.unitCost),
           discountAmount: lineDiscountRet,
           taxRate: new Prisma.Decimal(lockedItem.taxRate),
           taxAmount: lineTaxRet,
@@ -1145,6 +1204,56 @@ export async function createSaleReturn(
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }
   );
+  } catch (err: unknown) {
+    const errorWithCode = err as { code?: string; message?: string };
+    if (cleanIdempotencyKey && (errorWithCode.code === "P2002" || errorWithCode.message?.includes("idempotencyKey"))) {
+      const existing = await db.saleReturn.findUnique({
+        where: {
+          organizationId_idempotencyKey: {
+            organizationId,
+            idempotencyKey: cleanIdempotencyKey,
+          },
+        },
+        include: {
+          sale: {
+            select: {
+              id: true,
+              invoiceNumber: true,
+              saleDate: true,
+              totalAmount: true,
+              paidAmount: true,
+              customerId: true,
+              customer: {
+                select: { id: true, name: true, code: true, phone: true },
+              },
+            },
+          },
+          branch: {
+            select: { id: true, name: true, code: true },
+          },
+          returnedBy: {
+            select: { id: true, name: true, email: true },
+          },
+          items: {
+            orderBy: { id: "asc" },
+          },
+          refunds: {
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+
+      if (existing) {
+        if (existing.idempotencyHash !== computedHash) {
+          throw new SaleReturnIdempotencyConflictError(
+            `Idempotency key "${cleanIdempotencyKey}" was previously used with a different request payload.`
+          );
+        }
+        return existing as unknown as SaleReturnDetailDTO;
+      }
+    }
+    throw err;
+  }
 }
 
 // ============================================================================
@@ -1439,59 +1548,13 @@ export async function getSaleReturnableInfo(
     ? paidAmount.minus(totalRefundedAmount)
     : new Prisma.Decimal("0.00");
 
-  // Determine order-level discount allocations
-  const sumItemDiscounts = sale.items.reduce(
-    (acc, item) => acc.add(new Prisma.Decimal(item.discountAmount)),
-    new Prisma.Decimal("0.00")
-  );
-  const totalSaleDiscount = new Prisma.Decimal(sale.discountAmount);
-  const orderDiscount = totalSaleDiscount.greaterThan(sumItemDiscounts)
-    ? totalSaleDiscount.minus(sumItemDiscounts)
-    : new Prisma.Decimal("0.00");
-
-  const itemNetBases = sale.items.map((item) => {
-    const sub = new Prisma.Decimal(item.subtotal);
-    const disc = new Prisma.Decimal(item.discountAmount);
-    const netBase = sub.greaterThan(disc) ? sub.minus(disc) : new Prisma.Decimal("0.00");
-    return { id: item.id, netBase, lineTotal: new Prisma.Decimal(item.lineTotal) };
-  });
-
-  const totalNetBase = itemNetBases.reduce(
-    (acc, item) => acc.add(item.netBase),
-    new Prisma.Decimal("0.00")
-  );
-
-  const lineTotalRefundableMap = new Map<string, Prisma.Decimal>();
-  if (orderDiscount.greaterThan(0) && totalNetBase.greaterThan(0)) {
-    let allocatedOrderDiscount = new Prisma.Decimal("0.00");
-    for (let i = 0; i < itemNetBases.length; i++) {
-      const item = itemNetBases[i];
-      let share: Prisma.Decimal;
-      if (i === itemNetBases.length - 1) {
-        share = orderDiscount.minus(allocatedOrderDiscount);
-      } else {
-        share = orderDiscount
-          .times(item.netBase)
-          .dividedBy(totalNetBase)
-          .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-        allocatedOrderDiscount = allocatedOrderDiscount.add(share);
-      }
-      const totalRefundable = item.lineTotal.minus(share);
-      lineTotalRefundableMap.set(
-        item.id,
-        totalRefundable.greaterThan(0) ? totalRefundable : new Prisma.Decimal("0.00")
-      );
-    }
-  } else {
-    for (const item of itemNetBases) {
-      lineTotalRefundableMap.set(item.id, item.lineTotal);
-    }
-  }
+  const lineCeilingsMap = calculateSaleLineCeilings(sale, sale.items);
 
   // Map items to DTO
   let totalRemainingQuantity = new Prisma.Decimal("0.000");
   const returnableItems: SaleReturnableItemDTO[] = sale.items.map((item) => {
-    const qtySold = new Prisma.Decimal(item.quantity);
+    const ceiling = lineCeilingsMap.get(item.id)!;
+    const qtySold = ceiling.qtySold;
     const qtyReturned = new Prisma.Decimal(item.quantityReturned);
     const qtyReturnable = qtySold.greaterThan(qtyReturned)
       ? qtySold.minus(qtyReturned)
@@ -1499,8 +1562,7 @@ export async function getSaleReturnableInfo(
 
     totalRemainingQuantity = totalRemainingQuantity.add(qtyReturnable);
 
-    const totalRefundableAmount =
-      lineTotalRefundableMap.get(item.id) ?? new Prisma.Decimal(item.lineTotal);
+    const totalRefundableAmount = ceiling.fullRefundableLineAmount;
     const amountAlreadyReturned = new Prisma.Decimal(item.amountReturned);
     const amountRemainingRefundable = totalRefundableAmount.greaterThan(amountAlreadyReturned)
       ? totalRefundableAmount.minus(amountAlreadyReturned)
