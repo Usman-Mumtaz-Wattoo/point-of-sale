@@ -15,6 +15,10 @@ import {
   applyStockOutflowTransaction,
   InsufficientStockError,
 } from "./inventory";
+import {
+  CustomerNotFoundError,
+  CustomerValidationError,
+} from "./customers";
 
 // ============================================================================
 // ROLE ACCESS DEFINITIONS
@@ -84,12 +88,21 @@ export class SaleBranchAccessError extends SaleError {
   }
 }
 
+export class SaleCustomerInactiveError extends SaleValidationError {
+  constructor(message = "Customer is inactive and cannot be associated with a sale.") {
+    super(message);
+    this.name = "SaleCustomerInactiveError";
+  }
+}
+
 export {
   InsufficientStockError,
   CrossTenantViolationError,
   UnauthorizedRoleError,
   MembershipNotFoundError,
   BranchNotFoundError,
+  CustomerNotFoundError,
+  CustomerValidationError,
 };
 
 // ============================================================================
@@ -143,6 +156,7 @@ export interface ListSalesInput {
   status?: SaleStatus | null;
   paymentStatus?: SalePaymentStatus | null;
   cashierId?: string | null;
+  customerId?: string | null;
   dateFrom?: Date | string | null;
   dateTo?: Date | string | null;
   search?: string | null;
@@ -496,6 +510,58 @@ async function generateInvoiceNumber(
   return candidate;
 }
 
+/**
+ * Authoritatively validates an optional customer for a sale.
+ * - Walk-in: customerId null/empty/undefined -> returns null.
+ * - Registered customer:
+ *   1. Must exist within the same organization.
+ *   2. Must be active (isActive === true).
+ *   3. Cross-tenant or non-existent throws CustomerNotFoundError (preserves tenant privacy).
+ *   4. Inactive throws SaleCustomerInactiveError.
+ *   5. Note: Customers are organization-wide; primaryBranchId is metadata and does NOT restrict the sale branch.
+ */
+async function resolveSaleCustomer(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  customerId?: string | null
+): Promise<{ id: string; name: string } | null> {
+  if (customerId === undefined || customerId === null) {
+    return null;
+  }
+
+  const trimmedId = customerId.trim();
+  if (trimmedId.length === 0) {
+    return null;
+  }
+
+  const customer = await tx.customer.findFirst({
+    where: {
+      id: trimmedId,
+      organizationId,
+    },
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+    },
+  });
+
+  if (!customer) {
+    throw new CustomerNotFoundError();
+  }
+
+  if (!customer.isActive) {
+    throw new SaleCustomerInactiveError(
+      `Customer "${customer.name}" is inactive and cannot be associated with a sale.`
+    );
+  }
+
+  return {
+    id: customer.id,
+    name: customer.name,
+  };
+}
+
 // ============================================================================
 // COMPLETE SALE MUTATION SERVICE
 // ============================================================================
@@ -797,10 +863,13 @@ export async function completeSale(
   // 5. Atomic Checkout Transaction
   return await db.$transaction(
     async (tx) => {
-      // 5a. Generate sequential invoice number with advisory lock
+      // 5a. Validate and resolve optional customer authoritatively
+      const resolvedCustomer = await resolveSaleCustomer(tx, organizationId, input.customerId);
+
+      // 5b. Generate sequential invoice number with advisory lock
       const invoiceNumber = await generateInvoiceNumber(tx, organizationId, orgSettings?.invoicePrefix);
 
-      // 5b. Create Sale record
+      // 5c. Create Sale record
       const sale = await tx.sale.create({
         data: {
           organizationId,
@@ -817,7 +886,7 @@ export async function completeSale(
           changeAmount: totalChange,
           notes: input.notes?.trim() || null,
           cashierId: user.id,
-          customerId: input.customerId?.trim() || null,
+          customerId: resolvedCustomer?.id ?? null,
         },
       });
 
@@ -1166,6 +1235,11 @@ export async function listSales(
   // Cashier filter
   if (input.cashierId?.trim()) {
     where.cashierId = input.cashierId.trim();
+  }
+
+  // Customer filter
+  if (input.customerId?.trim()) {
+    where.customerId = input.customerId.trim();
   }
 
   // Date filters

@@ -114,6 +114,22 @@ export default async function DashboardPage() {
                     >
                       Catalog &rarr;
                     </Link>
+                    {membership.role.name !== "INVENTORY_MANAGER" && (
+                      <Link
+                        href={`/customers?org=${membership.organizationId}`}
+                        className="px-3 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+                      >
+                        Customers &rarr;
+                      </Link>
+                    )}
+                    {["OWNER", "MANAGER", "CASHIER"].includes(membership.role.name) && (
+                      <Link
+                        href={`/pos?org=${membership.organizationId}`}
+                        className="px-3 py-1 rounded text-xs font-medium bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 transition-colors font-semibold"
+                      >
+                        POS &rarr;
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}

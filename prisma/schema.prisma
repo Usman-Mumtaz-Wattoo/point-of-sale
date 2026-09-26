@@ -30,6 +30,7 @@ model Organization {
   updatedAt            DateTime                 @updatedAt
   branches             Branch[]
   categories           Category[]
+  customers            Customer[]
   inventoryMovements   InventoryMovement[]
   inventoryStocks      InventoryStock[]
   memberships          OrganizationMembership[]
@@ -72,6 +73,7 @@ model Branch {
   purchaseReceipts   PurchaseReceipt[]
   purchaseReturns    PurchaseReturn[]
   sales              Sale[]
+  primaryCustomers   Customer[]          @relation("BranchPrimaryCustomers")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -495,6 +497,34 @@ model PurchaseReturnItem {
   @@index([purchaseItemId])
 }
 
+model Customer {
+  id              String       @id @default(cuid())
+  organizationId  String
+  primaryBranchId String?
+  code            String?
+  name            String
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  taxNumber       String?
+  notes           String?
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  primaryBranch   Branch?      @relation("BranchPrimaryCustomers", fields: [primaryBranchId], references: [id], onDelete: SetNull)
+  sales           Sale[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+  @@index([organizationId, name])
+  @@index([organizationId, phone])
+  @@index([organizationId, email])
+  @@index([primaryBranchId])
+}
+
 model Sale {
   id             String            @id @default(cuid())
   organizationId String
@@ -517,6 +547,7 @@ model Sale {
   updatedAt      DateTime          @updatedAt
   branch         Branch            @relation(fields: [branchId], references: [id])
   cashier        User?             @relation("CashierSales", fields: [cashierId], references: [id])
+  customer       Customer?         @relation(fields: [customerId], references: [id], onDelete: Restrict)
   organization   Organization      @relation(fields: [organizationId], references: [id])
   items          SaleItem[]
   payments       SalePayment[]
@@ -528,6 +559,7 @@ model Sale {
   @@index([paymentStatus])
   @@index([saleDate])
   @@index([cashierId])
+  @@index([customerId])
 }
 
 model SaleItem {
