@@ -1,4 +1,4 @@
-import { PurchaseStatus, PurchasePaymentStatus } from "@prisma/client";
+import { PurchaseStatus, PurchasePaymentStatus, PurchasePaymentMethod } from "@prisma/client";
 import { type SystemRoleName } from "@/lib/roles";
 
 // ============================================================================
@@ -358,4 +358,25 @@ export interface ReceivePurchaseOrderActionResult {
   receiptId?: string;
   receiptNumber?: string;
   purchaseStatus?: PurchaseStatus;
+}
+
+// ============================================================================
+// STEP 17D: SUPPLIER PAYMENT DTOs
+// ============================================================================
+
+export interface RecordPurchasePaymentInputDTO {
+  purchaseId: string;
+  amount: string;
+  paymentMethod: PurchasePaymentMethod;
+  paidAt?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+}
+
+export interface RecordPurchasePaymentActionResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  paymentId?: string;
+  purchasePaymentStatus?: PurchasePaymentStatus;
 }

@@ -512,6 +512,7 @@ export function PurchasingView({ initialData }: PurchasingViewProps) {
           purchaseId={selectedPurchaseId}
           organizationId={initialData.organizationId}
           canMutatePurchases={initialData.canMutatePurchases}
+          userRole={initialData.userRole}
           onClose={() => setIsDetailDrawerOpen(false)}
           onEditPurchase={handleEditPurchaseFromDrawer}
           onPurchaseUpdated={handlePurchaseDrawerUpdated}

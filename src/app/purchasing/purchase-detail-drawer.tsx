@@ -12,12 +12,15 @@ import {
   cancelPurchaseAction,
 } from "./actions";
 import { ReceivingModal } from "./receiving-modal";
+import { PaymentModal } from "./payment-modal";
+import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
 
 interface PurchaseDetailDrawerProps {
   isOpen: boolean;
   purchaseId: string | null;
   organizationId: string;
   canMutatePurchases: boolean;
+  userRole?: SystemRoleName;
   onClose: () => void;
   onEditPurchase: (purchase: SerializedPurchaseDetailDTO) => void;
   onPurchaseUpdated: (message: string) => void;
@@ -27,6 +30,7 @@ function PurchaseDetailDrawerContent({
   purchaseId,
   organizationId,
   canMutatePurchases,
+  userRole,
   onClose,
   onEditPurchase,
   onPurchaseUpdated,
@@ -34,6 +38,7 @@ function PurchaseDetailDrawerContent({
   purchaseId: string;
   organizationId: string;
   canMutatePurchases: boolean;
+  userRole?: SystemRoleName;
   onClose: () => void;
   onEditPurchase: (purchase: SerializedPurchaseDetailDTO) => void;
   onPurchaseUpdated: (message: string) => void;
@@ -47,9 +52,21 @@ function PurchaseDetailDrawerContent({
   const [confirmOrderOpen, setConfirmOrderOpen] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [isReceivingModalOpen, setIsReceivingModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isActionPending, startActionTransition] = useTransition();
   const [, startLoadTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const canRecordPayments = userRole
+    ? userRole === SYSTEM_ROLES.OWNER || userRole === SYSTEM_ROLES.MANAGER || userRole === SYSTEM_ROLES.ACCOUNTANT
+    : canMutatePurchases;
+
+  const isPayableStatus =
+    purchase &&
+    (purchase.status === PurchaseStatus.ORDERED ||
+      purchase.status === PurchaseStatus.PARTIALLY_RECEIVED ||
+      purchase.status === PurchaseStatus.RECEIVED);
+  const hasOutstandingBalance = purchase ? parseFloat(purchase.balanceDue) > 0.0001 : false;
 
   // Fetch detail data
   const loadDetail = useCallback(() => {
@@ -89,6 +106,7 @@ function PurchaseDetailDrawerContent({
         !confirmOrderOpen &&
         !confirmCancelOpen &&
         !isReceivingModalOpen &&
+        !isPaymentModalOpen &&
         !isActionPending
       ) {
         onClose();
@@ -96,7 +114,7 @@ function PurchaseDetailDrawerContent({
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [confirmOrderOpen, confirmCancelOpen, isReceivingModalOpen, isActionPending, onClose]);
+  }, [confirmOrderOpen, confirmCancelOpen, isReceivingModalOpen, isPaymentModalOpen, isActionPending, onClose]);
 
   // Action: Mark as Ordered
   function handleMarkOrdered() {
@@ -352,7 +370,7 @@ function PurchaseDetailDrawerContent({
                 purchase.status === PurchaseStatus.PARTIALLY_RECEIVED) && (
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-2">
-                    {canMutatePurchases ? (
+                    {canMutatePurchases && (
                       <button
                         type="button"
                         onClick={() => setIsReceivingModalOpen(true)}
@@ -361,7 +379,18 @@ function PurchaseDetailDrawerContent({
                         <span>📦</span>
                         <span>Receive Goods</span>
                       </button>
-                    ) : (
+                    )}
+                    {isPayableStatus && hasOutstandingBalance && canRecordPayments && (
+                      <button
+                        type="button"
+                        onClick={() => setIsPaymentModalOpen(true)}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 shadow-md shadow-sky-900/20 transition-all flex items-center gap-1.5"
+                      >
+                        <span>💳</span>
+                        <span>Record Payment</span>
+                      </button>
+                    )}
+                    {!canMutatePurchases && !canRecordPayments && (
                       <span className="text-xs text-slate-500 italic">Read-only permissions</span>
                     )}
                   </div>
@@ -378,9 +407,21 @@ function PurchaseDetailDrawerContent({
               )}
 
               {purchase.status === PurchaseStatus.RECEIVED && (
-                <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-lg flex items-center gap-2">
-                  <span>✅</span>
-                  <span>All ordered items have been fully received into stock.</span>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-lg flex items-center gap-2">
+                    <span>✅</span>
+                    <span>All ordered items have been fully received into stock.</span>
+                  </div>
+                  {hasOutstandingBalance && canRecordPayments && (
+                    <button
+                      type="button"
+                      onClick={() => setIsPaymentModalOpen(true)}
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 shadow-md shadow-sky-900/20 transition-all flex items-center gap-1.5"
+                    >
+                      <span>💳</span>
+                      <span>Record Payment</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -657,6 +698,16 @@ function PurchaseDetailDrawerContent({
                               ${parseFloat(purchase.balanceDue).toFixed(2)}
                             </span>
                           </div>
+                          {isPayableStatus && hasOutstandingBalance && canRecordPayments && (
+                            <button
+                              type="button"
+                              onClick={() => setIsPaymentModalOpen(true)}
+                              className="w-full mt-2.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 shadow-sm transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <span>💳</span>
+                              <span>Record Payment</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -731,12 +782,24 @@ function PurchaseDetailDrawerContent({
                 {activeTab === "payments" && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Payment Records (Read-Only)
-                      </h4>
-                      <span className="text-xs text-slate-500">
-                        {purchase.payments.length} payment(s) recorded
-                      </span>
+                      <div>
+                        <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                          Payment Records
+                        </h4>
+                        <span className="text-xs text-slate-500">
+                          {purchase.payments.length} payment(s) recorded
+                        </span>
+                      </div>
+                      {isPayableStatus && hasOutstandingBalance && canRecordPayments && (
+                        <button
+                          type="button"
+                          onClick={() => setIsPaymentModalOpen(true)}
+                          className="px-3 py-1 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 transition-all flex items-center gap-1.5 shadow-sm"
+                        >
+                          <span>💳</span>
+                          <span>Record Payment</span>
+                        </button>
+                      )}
                     </div>
 
                     {purchase.payments.length === 0 ? (
@@ -951,6 +1014,21 @@ function PurchaseDetailDrawerContent({
           onClose={() => setIsReceivingModalOpen(false)}
           onSuccess={(msg) => {
             setIsReceivingModalOpen(false);
+            onPurchaseUpdated(msg);
+            loadDetail();
+          }}
+          purchase={purchase}
+          organizationId={organizationId}
+        />
+      )}
+
+      {/* Supplier Payment Modal */}
+      {isPaymentModalOpen && purchase && (
+        <PaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={() => setIsPaymentModalOpen(false)}
+          onSuccess={(msg) => {
+            setIsPaymentModalOpen(false);
             onPurchaseUpdated(msg);
             loadDetail();
           }}

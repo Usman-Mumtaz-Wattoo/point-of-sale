@@ -35,7 +35,14 @@ import {
   PurchaseReceiptNotFoundError,
   PurchaseReceiptConflictError,
 } from "@/lib/purchase-receiving";
-import { listPaymentsForPurchase } from "@/lib/purchase-payments";
+import {
+  listPaymentsForPurchase,
+  recordPurchasePayment,
+  PAYMENT_MUTATION_ROLES,
+  PurchasePaymentValidationError,
+  PurchasePaymentOverpaymentError,
+  PurchasePaymentStateError,
+} from "@/lib/purchase-payments";
 import { listPurchaseReturnsForPurchase } from "@/lib/purchase-returns";
 import {
   checkBranchAccess,
@@ -61,6 +68,8 @@ import {
   type PurchaseMutationActionResult,
   type ReceivePurchaseOrderInputDTO,
   type ReceivePurchaseOrderActionResult,
+  type RecordPurchasePaymentInputDTO,
+  type RecordPurchasePaymentActionResult,
 } from "./types";
 
 // ============================================================================
@@ -95,6 +104,7 @@ async function verifyPurchasingContext(params: {
   requestedOrgId?: string;
   requireSupplierMutation?: boolean;
   requirePurchaseMutation?: boolean;
+  requirePaymentMutation?: boolean;
   actorUser?: AppUserContext | null;
 }): Promise<VerifiedPurchasingContext> {
   const user = params.actorUser !== undefined ? params.actorUser : await getCurrentAppUser();
@@ -121,6 +131,12 @@ async function verifyPurchasingContext(params: {
     if (!SUPPLIER_MUTATION_ROLES.includes(role)) {
       throw new UnauthorizedRoleError(
         `Role "${role}" is not permitted to modify suppliers. Required one of: ${SUPPLIER_MUTATION_ROLES.join(", ")}.`
+      );
+    }
+  } else if (params.requirePaymentMutation) {
+    if (!PAYMENT_MUTATION_ROLES.includes(role)) {
+      throw new UnauthorizedRoleError(
+        `Role "${role}" is not permitted to record purchase payments. Required one of: ${PAYMENT_MUTATION_ROLES.join(", ")}.`
       );
     }
   } else if (params.requirePurchaseMutation) {
@@ -161,6 +177,13 @@ function translatePurchasingError(error: unknown, fallbackMessage: string): stri
     error instanceof PurchaseReceiptValidationError ||
     error instanceof PurchaseReceiptNotFoundError ||
     error instanceof PurchaseReceiptConflictError
+  ) {
+    return error.message;
+  }
+  if (
+    error instanceof PurchasePaymentValidationError ||
+    error instanceof PurchasePaymentOverpaymentError ||
+    error instanceof PurchasePaymentStateError
   ) {
     return error.message;
   }
@@ -990,6 +1013,105 @@ export async function receivePurchaseOrderAction(
       };
     }
     const errorMsg = translatePurchasingError(error, "Failed to record purchase receipt.");
+    return {
+      success: false,
+      error: errorMsg,
+    };
+  }
+}
+
+// ============================================================================
+// STEP 17D: SUPPLIER PAYMENT ACTIONS
+// ============================================================================
+
+export async function recordPurchasePaymentAction(
+  input: RecordPurchasePaymentInputDTO,
+  options?: { organizationId?: string; actorUser?: AppUserContext }
+): Promise<RecordPurchasePaymentActionResult> {
+  try {
+    const { user, organizationId } = await verifyPurchasingContext({
+      requestedOrgId: options?.organizationId,
+      requirePaymentMutation: true,
+      actorUser: options?.actorUser,
+    });
+
+    if (!input || !input.purchaseId || typeof input.purchaseId !== "string" || !input.purchaseId.trim()) {
+      return { success: false, error: "Purchase ID is required." };
+    }
+
+    if (!input.amount || typeof input.amount !== "string" || !input.amount.trim()) {
+      return { success: false, error: "Payment amount is required." };
+    }
+
+    if (!input.paymentMethod) {
+      return { success: false, error: "Payment method is required." };
+    }
+
+    // Verify existing purchase exists in organization and actor has branch access
+    const existingPurchase = await db.purchase.findFirst({
+      where: {
+        id: input.purchaseId.trim(),
+        organizationId,
+      },
+      select: {
+        id: true,
+        branchId: true,
+        status: true,
+        purchaseNumber: true,
+      },
+    });
+
+    if (!existingPurchase) {
+      return { success: false, error: "Purchase order not found." };
+    }
+
+    const hasBranchAccess = await checkBranchAccess({
+      userId: user.id,
+      organizationId,
+      branchId: existingPurchase.branchId,
+    });
+    if (!hasBranchAccess) {
+      return {
+        success: false,
+        error: `You do not have authorized access to branch "${existingPurchase.branchId}".`,
+      };
+    }
+
+    const payment = await recordPurchasePayment(
+      {
+        purchaseId: input.purchaseId.trim(),
+        amount: input.amount.trim(),
+        paymentMethod: input.paymentMethod,
+        paidAt: input.paidAt ? new Date(input.paidAt) : null,
+        reference: input.reference?.trim() || null,
+        notes: input.notes?.trim() || null,
+      },
+      {
+        organizationId,
+        actorUser: user,
+      }
+    );
+
+    return {
+      success: true,
+      message: `Payment of $${parseFloat(input.amount).toFixed(2)} recorded successfully.`,
+      paymentId: payment.id,
+      purchasePaymentStatus: payment.purchase.paymentStatus,
+    };
+  } catch (error) {
+    if (error instanceof PurchasePaymentOverpaymentError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof PurchasePaymentStateError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    const errorMsg = translatePurchasingError(error, "Failed to record supplier payment.");
     return {
       success: false,
       error: errorMsg,

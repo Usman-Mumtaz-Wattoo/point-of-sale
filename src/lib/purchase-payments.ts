@@ -4,6 +4,7 @@ import { db } from "./db";
 import { SYSTEM_ROLES, type SystemRoleName } from "./roles";
 import { getCurrentAppUser } from "./auth";
 import {
+  checkBranchAccess,
   CrossTenantViolationError,
   MembershipNotFoundError,
   UnauthorizedRoleError,
@@ -282,6 +283,7 @@ export async function recordPurchasePayment(
       {
         id: string;
         organizationId: string;
+        branchId: string;
         status: PurchaseStatus;
         paymentStatus: PurchasePaymentStatus;
         totalAmount: Prisma.Decimal;
@@ -289,7 +291,7 @@ export async function recordPurchasePayment(
         purchaseNumber: string;
       }[]
     >`
-      SELECT id, "organizationId", status, "paymentStatus", "totalAmount", "paidAmount", "purchaseNumber"
+      SELECT id, "organizationId", "branchId", status, "paymentStatus", "totalAmount", "paidAmount", "purchaseNumber"
       FROM "Purchase"
       WHERE id = ${cleanPurchaseId}
       FOR UPDATE
@@ -298,6 +300,19 @@ export async function recordPurchasePayment(
 
     if (!lockedPurchase || lockedPurchase.organizationId !== organizationId) {
       throw new PurchaseNotFoundError(`Purchase order with ID "${cleanPurchaseId}" not found.`);
+    }
+
+    // Verify actor has authorized access to the purchase's branch at transaction execution time
+    const hasBranchAccess = await checkBranchAccess({
+      userId: user.id,
+      organizationId,
+      branchId: lockedPurchase.branchId,
+      tx,
+    });
+    if (!hasBranchAccess) {
+      throw new UnauthorizedRoleError(
+        `User does not have authorized access to branch "${lockedPurchase.branchId}".`
+      );
     }
 
     // b. Validate purchase status
@@ -391,7 +406,7 @@ export async function recordPurchasePayment(
         },
       },
     });
-  });
+  }, { timeout: 25000, maxWait: 10000 });
 }
 
 // ============================================================================
