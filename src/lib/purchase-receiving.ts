@@ -11,6 +11,7 @@ import {
   UnauthorizedRoleError,
 } from "./purchases";
 import { applyStockInflowTransaction } from "./inventory";
+import { checkBranchAccess } from "./memberships";
 
 // ============================================================================
 // DOMAIN ERROR HIERARCHY
@@ -271,6 +272,19 @@ export async function receivePurchaseOrder(
       throw new PurchaseNotFoundError(`Purchase order with ID "${cleanPurchaseId}" not found.`);
     }
 
+    // Verify actor has authorized access to the purchase's branch at transaction execution time
+    const hasBranchAccess = await checkBranchAccess({
+      userId: user.id,
+      organizationId,
+      branchId: lockedPurchase.branchId,
+      tx,
+    });
+    if (!hasBranchAccess) {
+      throw new UnauthorizedRoleError(
+        `User does not have authorized access to branch "${lockedPurchase.branchId}".`
+      );
+    }
+
     // b. Validate purchase status
     if (
       lockedPurchase.status !== PurchaseStatus.ORDERED &&
@@ -373,7 +387,15 @@ export async function receivePurchaseOrder(
     });
 
     // f. Process each item: PurchaseReceiptItem -> applyStockInflowTransaction -> PurchaseItem update
-    for (const ctx of itemContexts) {
+    // Sort items deterministically by inventory stock key (branchId:productId:variantId)
+    // to guarantee consistent lock acquisition order and prevent inventory-level deadlocks
+    const sortedItemContexts = [...itemContexts].sort((a, b) => {
+      const keyA = `${lockedPurchase.branchId}:${a.purchaseItem.productId}:${a.purchaseItem.variantId ?? ""}`;
+      const keyB = `${lockedPurchase.branchId}:${b.purchaseItem.productId}:${b.purchaseItem.variantId ?? ""}`;
+      return keyA.localeCompare(keyB);
+    });
+
+    for (const ctx of sortedItemContexts) {
       const receiptItem = await tx.purchaseReceiptItem.create({
         data: {
           organizationId,
@@ -493,7 +515,7 @@ export async function receivePurchaseOrder(
         },
       },
     });
-  });
+  }, { timeout: 45000, maxWait: 15000 });
 }
 
 // ============================================================================

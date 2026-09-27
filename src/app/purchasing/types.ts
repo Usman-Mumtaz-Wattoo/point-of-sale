@@ -334,3 +334,28 @@ export interface PurchaseMutationActionResult {
   purchaseId?: string;
   purchaseNumber?: string;
 }
+
+// ============================================================================
+// STEP 17C: GOODS RECEIVING DTOs
+// ============================================================================
+
+export interface ReceivePurchaseOrderItemInputDTO {
+  purchaseItemId: string;
+  quantityReceived: string;
+}
+
+export interface ReceivePurchaseOrderInputDTO {
+  purchaseId: string;
+  items: ReceivePurchaseOrderItemInputDTO[];
+  receivedAt?: string | null;
+  notes?: string | null;
+}
+
+export interface ReceivePurchaseOrderActionResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  receiptId?: string;
+  receiptNumber?: string;
+  purchaseStatus?: PurchaseStatus;
+}

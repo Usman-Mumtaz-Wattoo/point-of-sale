@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { SYSTEM_ROLES, type SystemRoleName } from "./roles";
 
@@ -116,8 +117,10 @@ export async function removeBranchMembership(params: {
 export async function getOrganizationMembership(params: {
   userId: string;
   organizationId: string;
+  tx?: Prisma.TransactionClient;
 }) {
-  return db.organizationMembership.findUnique({
+  const client = params.tx ?? db;
+  return client.organizationMembership.findUnique({
     where: {
       userId_organizationId: {
         userId: params.userId,
@@ -143,6 +146,7 @@ export async function getOrganizationMembership(params: {
 export async function requireOrganizationMembership(params: {
   userId: string;
   organizationId: string;
+  tx?: Prisma.TransactionClient;
 }) {
   const membership = await getOrganizationMembership(params);
 
@@ -162,10 +166,12 @@ export async function requireRole(params: {
   userId: string;
   organizationId: string;
   allowedRoles: readonly (SystemRoleName | string)[];
+  tx?: Prisma.TransactionClient;
 }) {
   const membership = await requireOrganizationMembership({
     userId: params.userId,
     organizationId: params.organizationId,
+    tx: params.tx,
   });
 
   if (!params.allowedRoles.includes(membership.role.name)) {
@@ -185,10 +191,13 @@ export async function checkBranchAccess(params: {
   userId: string;
   organizationId: string;
   branchId: string;
+  tx?: Prisma.TransactionClient;
 }): Promise<boolean> {
+  const client = params.tx ?? db;
   const membership = await getOrganizationMembership({
     userId: params.userId,
     organizationId: params.organizationId,
+    tx: client,
   });
 
   if (!membership || !membership.isActive) {
@@ -198,7 +207,7 @@ export async function checkBranchAccess(params: {
   // System OWNER role has organization-wide access across all branches
   if (membership.role.name === SYSTEM_ROLES.OWNER) {
     // Verify branch belongs to this organization
-    const branch = await db.branch.findUnique({
+    const branch = await client.branch.findUnique({
       where: { id: params.branchId },
       select: { organizationId: true, isActive: true },
     });

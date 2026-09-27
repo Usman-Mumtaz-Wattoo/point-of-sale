@@ -11,6 +11,7 @@ import {
   markPurchaseOrderedAction,
   cancelPurchaseAction,
 } from "./actions";
+import { ReceivingModal } from "./receiving-modal";
 
 interface PurchaseDetailDrawerProps {
   isOpen: boolean;
@@ -45,6 +46,7 @@ function PurchaseDetailDrawerContent({
   // Confirmation dialogs
   const [confirmOrderOpen, setConfirmOrderOpen] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [isReceivingModalOpen, setIsReceivingModalOpen] = useState(false);
   const [isActionPending, startActionTransition] = useTransition();
   const [, startLoadTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -82,13 +84,19 @@ function PurchaseDetailDrawerContent({
   // Handle ESC key
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !confirmOrderOpen && !confirmCancelOpen && !isActionPending) {
+      if (
+        e.key === "Escape" &&
+        !confirmOrderOpen &&
+        !confirmCancelOpen &&
+        !isReceivingModalOpen &&
+        !isActionPending
+      ) {
         onClose();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [confirmOrderOpen, confirmCancelOpen, isActionPending, onClose]);
+  }, [confirmOrderOpen, confirmCancelOpen, isReceivingModalOpen, isActionPending, onClose]);
 
   // Action: Mark as Ordered
   function handleMarkOrdered() {
@@ -339,29 +347,40 @@ function PurchaseDetailDrawerContent({
                 </div>
               )}
 
-              {/* Non-DRAFT Informational Areas */}
-              {purchase.status === PurchaseStatus.ORDERED && (
-                <div className="text-xs text-sky-400 bg-sky-500/10 border border-sky-500/20 px-3 py-2 rounded-lg flex items-center gap-2">
-                  <span>ℹ️</span>
-                  <span>
-                    This order is <strong>ORDERED</strong>. Receiving goods and recording supplier payments will be supported in subsequent operational releases.
-                  </span>
-                </div>
-              )}
+              {/* Non-DRAFT Informational / Action Areas */}
+              {(purchase.status === PurchaseStatus.ORDERED ||
+                purchase.status === PurchaseStatus.PARTIALLY_RECEIVED) && (
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    {canMutatePurchases ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsReceivingModalOpen(true)}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-900/20 transition-all flex items-center gap-1.5"
+                      >
+                        <span>📦</span>
+                        <span>Receive Goods</span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500 italic">Read-only permissions</span>
+                    )}
+                  </div>
 
-              {purchase.status === PurchaseStatus.PARTIALLY_RECEIVED && (
-                <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-lg flex items-center gap-2">
-                  <span>ℹ️</span>
-                  <span>
-                    This order is <strong>PARTIALLY RECEIVED</strong>. Further shipment receipts and payments will be managed in subsequent operational steps.
-                  </span>
+                  <div className="text-xs text-slate-400">
+                    Status:{" "}
+                    <span className="font-semibold text-slate-200">
+                      {purchase.status === PurchaseStatus.ORDERED
+                        ? "Ordered (Awaiting Delivery)"
+                        : "Partially Received"}
+                    </span>
+                  </div>
                 </div>
               )}
 
               {purchase.status === PurchaseStatus.RECEIVED && (
                 <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-lg flex items-center gap-2">
                   <span>✅</span>
-                  <span>All ordered items have been fully received.</span>
+                  <span>All ordered items have been fully received into stock.</span>
                 </div>
               )}
 
@@ -923,6 +942,21 @@ function PurchaseDetailDrawerContent({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Goods Receiving Modal */}
+      {isReceivingModalOpen && purchase && (
+        <ReceivingModal
+          isOpen={isReceivingModalOpen}
+          onClose={() => setIsReceivingModalOpen(false)}
+          onSuccess={(msg) => {
+            setIsReceivingModalOpen(false);
+            onPurchaseUpdated(msg);
+            loadDetail();
+          }}
+          purchase={purchase}
+          organizationId={organizationId}
+        />
       )}
     </div>
   );

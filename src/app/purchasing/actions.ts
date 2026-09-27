@@ -28,7 +28,13 @@ import {
   PurchaseStateError,
   type AppUserContext,
 } from "@/lib/purchases";
-import { listReceiptsForPurchase } from "@/lib/purchase-receiving";
+import {
+  listReceiptsForPurchase,
+  receivePurchaseOrder,
+  PurchaseReceiptValidationError,
+  PurchaseReceiptNotFoundError,
+  PurchaseReceiptConflictError,
+} from "@/lib/purchase-receiving";
 import { listPaymentsForPurchase } from "@/lib/purchase-payments";
 import { listPurchaseReturnsForPurchase } from "@/lib/purchase-returns";
 import {
@@ -53,6 +59,8 @@ import {
   type SerializedPurchaseDetailDTO,
   type PurchaseDetailActionResult,
   type PurchaseMutationActionResult,
+  type ReceivePurchaseOrderInputDTO,
+  type ReceivePurchaseOrderActionResult,
 } from "./types";
 
 // ============================================================================
@@ -147,6 +155,13 @@ function translatePurchasingError(error: unknown, fallbackMessage: string): stri
     return error.message;
   }
   if (error instanceof PurchaseStateError) {
+    return error.message;
+  }
+  if (
+    error instanceof PurchaseReceiptValidationError ||
+    error instanceof PurchaseReceiptNotFoundError ||
+    error instanceof PurchaseReceiptConflictError
+  ) {
     return error.message;
   }
   if (
@@ -891,6 +906,90 @@ export async function getPurchaseDetailAction(
     };
   } catch (error) {
     const errorMsg = translatePurchasingError(error, "Failed to load purchase details.");
+    return {
+      success: false,
+      error: errorMsg,
+    };
+  }
+}
+
+// ============================================================================
+// STEP 17C: GOODS RECEIVING ACTIONS
+// ============================================================================
+
+export async function receivePurchaseOrderAction(
+  input: ReceivePurchaseOrderInputDTO,
+  options?: { organizationId?: string; actorUser?: AppUserContext }
+): Promise<ReceivePurchaseOrderActionResult> {
+  try {
+    const { user, organizationId } = await verifyPurchasingContext({
+      requestedOrgId: options?.organizationId,
+      requirePurchaseMutation: true,
+      actorUser: options?.actorUser,
+    });
+
+    if (!input.purchaseId || typeof input.purchaseId !== "string" || !input.purchaseId.trim()) {
+      return { success: false, error: "Purchase ID is required." };
+    }
+
+    if (!input.items || !Array.isArray(input.items) || input.items.length === 0) {
+      return { success: false, error: "At least one item must be received." };
+    }
+
+    // Verify purchase exists in the verified tenant organization and check branch access
+    const existingPurchase = await db.purchase.findFirst({
+      where: { id: input.purchaseId.trim(), organizationId },
+      select: { id: true, branchId: true, purchaseNumber: true, status: true },
+    });
+
+    if (!existingPurchase) {
+      return { success: false, error: `Purchase order with ID "${input.purchaseId}" not found.` };
+    }
+
+    const hasBranchAccess = await checkBranchAccess({
+      userId: user.id,
+      organizationId,
+      branchId: existingPurchase.branchId,
+    });
+    if (!hasBranchAccess) {
+      return {
+        success: false,
+        error: `You do not have authorized access to branch "${existingPurchase.branchId}".`,
+      };
+    }
+
+    const receipt = await receivePurchaseOrder(
+      {
+        purchaseId: input.purchaseId.trim(),
+        items: input.items.map((it) => ({
+          purchaseItemId: it.purchaseItemId.trim(),
+          quantityReceived: it.quantityReceived,
+        })),
+        receivedAt: input.receivedAt,
+        notes: input.notes,
+      },
+      {
+        organizationId,
+        actorUser: user,
+      }
+    );
+
+    return {
+      success: true,
+      message: `Goods receipt ${receipt.receiptNumber} recorded successfully.`,
+      receiptId: receipt.id,
+      receiptNumber: receipt.receiptNumber,
+      purchaseStatus: receipt.purchase.status,
+    };
+  } catch (error) {
+    if (error instanceof PurchaseStateError) {
+      return {
+        success: false,
+        error:
+          "This purchase order was modified by another user or is no longer in an open receivable status. Please refresh to view the latest status.",
+      };
+    }
+    const errorMsg = translatePurchasingError(error, "Failed to record purchase receipt.");
     return {
       success: false,
       error: errorMsg,
