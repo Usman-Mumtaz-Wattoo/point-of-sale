@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, SalePaymentMethod, SaleStatus, SalePaymentStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { getCurrentAppUser } from "@/lib/auth";
+import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
 import {
   getSaleReturnableInfo,
   createSaleReturn,
@@ -17,186 +19,32 @@ import {
   SaleReturnIdempotencyConflictError,
   UnauthorizedRoleError,
   SaleReturnServiceOptions,
+  SALE_RETURN_READ_ROLES,
+  SALE_RETURN_MUTATION_ROLES,
+  type AppUserContext,
 } from "@/lib/sale-returns";
 import {
   MembershipNotFoundError,
   CrossTenantViolationError,
   BranchNotFoundError,
 } from "@/lib/memberships";
+import type {
+  SerializedReturnableInfo,
+  SerializedSaleReturnDetail,
+  SerializedPaginatedReturns,
+  ReturnActionResult,
+  SubmitReturnInput,
+  ListReturnsActionParams,
+} from "./types";
 
-// ============================================================================
-// SERIALIZED ACTION TYPES
-// ============================================================================
-
-export interface SerializedReturnableItem {
-  saleItemId: string;
-  productId: string;
-  variantId: string | null;
-  productName: string;
-  productSku: string | null;
-  quantitySold: string;
-  quantityAlreadyReturned: string;
-  quantityReturnable: string;
-  unitPrice: string;
-  unitCost: string;
-  discountAmount: string;
-  taxRate: string;
-  taxAmount: string;
-  lineTotal: string;
-  totalRefundableAmount: string;
-  amountAlreadyReturned: string;
-  amountRemainingRefundable: string;
-}
-
-export interface SerializedReturnableInfo {
-  saleId: string;
-  invoiceNumber: string;
-  saleDate: string;
-  status: SaleStatus;
-  paymentStatus: SalePaymentStatus;
-  totalAmount: string;
-  paidAmount: string;
-  totalRefundedAmount: string;
-  remainingRefundCeiling: string;
-  isEligibleForReturn: boolean;
-  ineligibilityReason: string | null;
-  branch: {
-    id: string;
-    name: string;
-    code: string;
-  };
-  customer: {
-    id: string;
-    name: string;
-    code: string | null;
-    phone: string | null;
-  } | null;
-  cashier: {
-    id: string;
-    name: string;
-  } | null;
-  items: SerializedReturnableItem[];
-}
-
-export interface SerializedReturnItemDetail {
-  id: string;
-  saleItemId: string;
-  productId: string;
-  variantId: string | null;
-  productName: string;
-  productSku: string | null;
-  quantityReturned: string;
-  unitPrice: string;
-  unitCost: string;
-  discountAmount: string;
-  taxRate: string;
-  taxAmount: string;
-  subtotal: string;
-  lineTotal: string;
-  reason: string | null;
-}
-
-export interface SerializedRefundDetail {
-  id: string;
-  refundNumber: string;
-  amount: string;
-  paymentMethod: SalePaymentMethod;
-  reference: string | null;
-  notes: string | null;
-  refundedAt: string;
-  processedBy: {
-    id: string;
-    name: string;
-    email: string;
-  };
-}
-
-export interface SerializedSaleReturnDetail {
-  id: string;
-  returnNumber: string;
-  organizationId: string;
-  branchId: string;
-  saleId: string;
-  subtotal: string;
-  discountAmount: string;
-  taxAmount: string;
-  totalAmount: string;
-  refundedAmount: string;
-  reason: string | null;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-  sale: {
-    id: string;
-    invoiceNumber: string;
-    saleDate: string;
-    totalAmount: string;
-    paidAmount: string;
-    customerId: string | null;
-    customer: {
-      id: string;
-      name: string;
-      code: string | null;
-      phone: string | null;
-    } | null;
-  };
-  branch: {
-    id: string;
-    name: string;
-    code: string;
-  };
-  returnedBy: {
-    id: string;
-    name: string;
-    email: string;
-  } | null;
-  items: SerializedReturnItemDetail[];
-  refunds: SerializedRefundDetail[];
-}
-
-export interface SerializedPaginatedReturns {
-  items: SerializedSaleReturnDetail[];
-  page: number;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
-}
-
-export interface ReturnActionResult<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-export interface SubmitReturnItemInput {
-  saleItemId: string;
-  quantityReturned: string | number;
-  reason?: string | null;
-}
-
-export interface SubmitReturnInput {
-  saleId: string;
-  items: SubmitReturnItemInput[];
-  refund: {
-    paymentMethod: SalePaymentMethod;
-    reference?: string | null;
-    notes?: string | null;
-  };
-  idempotencyKey?: string | null;
-  reason?: string | null;
-  notes?: string | null;
-}
-
-export interface ListReturnsActionParams {
-  branchId?: string;
-  saleId?: string;
-  search?: string;
-  startDate?: string;
-  endDate?: string;
-  page?: number;
-  pageSize?: number;
-}
+export type {
+  SerializedReturnableInfo,
+  SerializedSaleReturnDetail,
+  SerializedPaginatedReturns,
+  ReturnActionResult,
+  SubmitReturnInput,
+  ListReturnsActionParams,
+};
 
 // Helper to convert Prisma Decimal and Date objects into JSON-safe primitives
 function serializeData<T>(obj: T): unknown {
@@ -214,6 +62,86 @@ function serializeData<T>(obj: T): unknown {
 }
 
 // ============================================================================
+// TENANT CONTEXT VERIFICATION (SERVER-ACTION BOUNDARY)
+// ============================================================================
+
+export interface VerifiedServerActionContext {
+  user: AppUserContext;
+  organizationId: string;
+  role: SystemRoleName;
+  membership: AppUserContext["memberships"][0];
+}
+
+/**
+ * Validates the caller's server-side authentication session and active organization membership.
+ *
+ * SECURITY ENFORCEMENTS:
+ * 1. Authenticated user is resolved strictly server-side (via session cookies / Supabase auth).
+ *    Client input cannot spoof the user identity.
+ * 2. If a requestedOrgId is supplied by the client (e.g. from an organization selector),
+ *    the server verifies that the user possesses an ACTIVE membership in that organization.
+ *    Client cannot access or mutate another tenant's data by guessing or supplying an arbitrary orgId.
+ * 3. If requestedOrgId is omitted, defaults safely to the user's first active membership.
+ * 4. Verifies role permissions:
+ *    - Mutation actions require one of SALE_RETURN_MUTATION_ROLES (OWNER, MANAGER, CASHIER).
+ *    - Read actions require one of SALE_RETURN_READ_ROLES (OWNER, MANAGER, CASHIER, ACCOUNTANT).
+ * 5. Returns the verified organizationId derived directly from the verified membership,
+ *    never trusting raw client values.
+ */
+async function verifyServerActionTenantContext(
+  requestedOrgId?: string,
+  options?: SaleReturnServiceOptions,
+  requireMutation: boolean = false
+): Promise<VerifiedServerActionContext> {
+  const user = options?.actorUser !== undefined ? options.actorUser : await getCurrentAppUser();
+  if (!user) {
+    throw new Error("Unauthorized: Authentication required.");
+  }
+
+  // Treat requestedOrgId or options.organizationId as candidate organization selector
+  const candidateOrgId = requestedOrgId?.trim() || options?.organizationId?.trim() || undefined;
+
+  const membership = candidateOrgId
+    ? user.memberships.find((m) => m.organizationId === candidateOrgId && m.isActive)
+    : user.memberships.find((m) => m.isActive);
+
+  if (!membership) {
+    throw new MembershipNotFoundError(
+      candidateOrgId
+        ? `User does not have an active membership in organization "${candidateOrgId}".`
+        : "User does not belong to any active organization."
+    );
+  }
+
+  const roleName = membership.role.name as SystemRoleName;
+
+  if (requireMutation) {
+    if (!SALE_RETURN_MUTATION_ROLES.includes(roleName)) {
+      throw new UnauthorizedRoleError(
+        `Role "${roleName}" is not permitted to process sales returns. Required one of: ${SALE_RETURN_MUTATION_ROLES.join(
+          ", "
+        )}.`
+      );
+    }
+  } else {
+    if (!SALE_RETURN_READ_ROLES.includes(roleName)) {
+      throw new UnauthorizedRoleError(
+        `Role "${roleName}" is not permitted to view sales returns. Required one of: ${SALE_RETURN_READ_ROLES.join(
+          ", "
+        )}.`
+      );
+    }
+  }
+
+  return {
+    user,
+    organizationId: membership.organizationId,
+    role: roleName,
+    membership,
+  };
+}
+
+// ============================================================================
 // SERVER ACTIONS
 // ============================================================================
 
@@ -222,7 +150,7 @@ function serializeData<T>(obj: T): unknown {
  */
 export async function getSaleReturnableInfoAction(
   saleIdOrInvoiceNumber: string,
-  organizationId?: string,
+  requestedOrgId?: string,
   options?: SaleReturnServiceOptions
 ): Promise<ReturnActionResult<SerializedReturnableInfo>> {
   if (!saleIdOrInvoiceNumber?.trim()) {
@@ -230,9 +158,16 @@ export async function getSaleReturnableInfoAction(
   }
 
   try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      requestedOrgId,
+      options,
+      false
+    );
+
     const info = await getSaleReturnableInfo(saleIdOrInvoiceNumber.trim(), {
       ...options,
       organizationId,
+      actorUser: user,
     });
     return {
       success: true,
@@ -263,7 +198,7 @@ export async function getSaleReturnableInfoAction(
  */
 export async function createSaleReturnAction(
   input: SubmitReturnInput,
-  organizationId?: string,
+  requestedOrgId?: string,
   options?: SaleReturnServiceOptions
 ): Promise<ReturnActionResult<SerializedSaleReturnDetail>> {
   if (!input.saleId?.trim()) {
@@ -294,6 +229,12 @@ export async function createSaleReturnAction(
   }
 
   try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      requestedOrgId,
+      options,
+      true
+    );
+
     const result = await createSaleReturn(
       {
         saleId: input.saleId.trim(),
@@ -307,7 +248,11 @@ export async function createSaleReturnAction(
         reason: input.reason?.trim() || null,
         notes: input.notes?.trim() || null,
       },
-      { ...options, organizationId }
+      {
+        ...options,
+        organizationId,
+        actorUser: user,
+      }
     );
 
     try {
@@ -350,7 +295,7 @@ export async function createSaleReturnAction(
  */
 export async function getSaleReturnByIdAction(
   returnId: string,
-  organizationId?: string,
+  requestedOrgId?: string,
   options?: SaleReturnServiceOptions
 ): Promise<ReturnActionResult<SerializedSaleReturnDetail>> {
   if (!returnId?.trim()) {
@@ -358,9 +303,16 @@ export async function getSaleReturnByIdAction(
   }
 
   try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      requestedOrgId,
+      options,
+      false
+    );
+
     const returnDetail = await getSaleReturnById(returnId.trim(), {
       ...options,
       organizationId,
+      actorUser: user,
     });
     return {
       success: true,
@@ -389,10 +341,30 @@ export async function getSaleReturnByIdAction(
  */
 export async function listSaleReturnsAction(
   params: ListReturnsActionParams,
-  organizationId?: string,
+  requestedOrgId?: string,
   options?: SaleReturnServiceOptions
 ): Promise<ReturnActionResult<SerializedPaginatedReturns>> {
   try {
+    const { organizationId, user, role, membership } = await verifyServerActionTenantContext(
+      requestedOrgId,
+      options,
+      false
+    );
+
+    // If client supplied a branchId filter, verify branch access against the authenticated membership
+    if (params.branchId?.trim() && role !== SYSTEM_ROLES.OWNER) {
+      const assignedBranchIds = (membership.branchMemberships || [])
+        .filter((bm) => bm.branch.isActive)
+        .map((bm) => bm.branchId);
+
+      if (!assignedBranchIds.includes(params.branchId.trim())) {
+        return {
+          success: false,
+          error: `User does not have authorized access to branch "${params.branchId.trim()}".`,
+        };
+      }
+    }
+
     const listResult = await listSaleReturns(
       {
         branchId: params.branchId?.trim() || undefined,
@@ -403,7 +375,11 @@ export async function listSaleReturnsAction(
         page: params.page ?? 1,
         pageSize: params.pageSize ?? 10,
       },
-      { ...options, organizationId }
+      {
+        ...options,
+        organizationId,
+        actorUser: user,
+      }
     );
 
     return {

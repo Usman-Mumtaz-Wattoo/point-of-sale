@@ -2,7 +2,6 @@
 
 import { useState, useTransition, useId } from "react";
 import Link from "next/link";
-import { SalePaymentMethod } from "@prisma/client";
 import {
   RotateCcw,
   History,
@@ -27,10 +26,13 @@ import {
   createSaleReturnAction,
   getSaleReturnByIdAction,
   listSaleReturnsAction,
-  SerializedReturnableInfo,
-  SerializedSaleReturnDetail,
-  SerializedPaginatedReturns,
 } from "./actions";
+import {
+  SalePaymentMethod,
+  type SerializedReturnableInfo,
+  type SerializedSaleReturnDetail,
+  type SerializedPaginatedReturns,
+} from "./types";
 
 interface BranchOption {
   id: string;

@@ -7,7 +7,8 @@ import {
 import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
 import { db } from "@/lib/db";
 import { ReturnsView } from "./returns-view";
-import { listSaleReturnsAction, SerializedPaginatedReturns } from "./actions";
+import { listSaleReturnsAction } from "./actions";
+import type { SerializedPaginatedReturns } from "./types";
 
 export const metadata = {
   title: "Sales Returns & Refunds — Point of Sale",
