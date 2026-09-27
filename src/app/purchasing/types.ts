@@ -147,3 +147,190 @@ export interface PurchasingPageInitialData {
   allActiveSuppliersForFilter: { id: string; name: string }[];
   defaultTab: "purchases" | "suppliers";
 }
+
+// ============================================================================
+// STEP 17B: CATALOG SEARCH & PURCHASE MUTATION DTOs
+// ============================================================================
+
+export interface SelectablePurchasingCatalogItem {
+  productId: string;
+  variantId: string | null;
+  productName: string;
+  variantName: string | null;
+  sku: string;
+  unit: string;
+  costPrice: string;
+  isVariable: boolean;
+}
+
+export interface CreatePurchaseLineItemDTO {
+  productId: string;
+  variantId?: string | null;
+  quantity: string;
+  unitCost: string;
+  taxRate?: string;
+  notes?: string | null;
+}
+
+export interface CreatePurchaseInputDTO {
+  supplierId: string;
+  branchId: string;
+  orderDate?: string;
+  expectedDate?: string | null;
+  notes?: string | null;
+  discountAmount?: string;
+  taxAmount?: string;
+  shippingAmount?: string;
+  items: CreatePurchaseLineItemDTO[];
+}
+
+export interface UpdatePurchaseInputDTO {
+  supplierId?: string;
+  branchId?: string;
+  orderDate?: string;
+  expectedDate?: string | null;
+  notes?: string | null;
+  discountAmount?: string;
+  taxAmount?: string;
+  shippingAmount?: string;
+  items?: CreatePurchaseLineItemDTO[];
+}
+
+// ============================================================================
+// STEP 17B: PURCHASE DETAIL & HISTORY DTOs
+// ============================================================================
+
+export interface SerializedPurchaseDetailItem {
+  id: string;
+  purchaseId: string;
+  productId: string;
+  variantId: string | null;
+  quantityOrdered: string;
+  quantityReceived: string;
+  quantityReturned: string;
+  remainingToReceive: string;
+  unitCost: string;
+  taxRate: string;
+  lineTotal: string;
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    unit: string;
+  };
+  variant: {
+    id: string;
+    name: string;
+    sku: string | null;
+  } | null;
+}
+
+export interface SerializedPurchaseReceiptHistoryItem {
+  id: string;
+  receiptNumber: string;
+  receivedAt: string;
+  notes: string | null;
+  itemCount: number;
+  receivedBy: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
+
+export interface SerializedPurchasePaymentHistoryItem {
+  id: string;
+  paymentMethod: string;
+  amount: string;
+  paidAt: string;
+  reference: string | null;
+  notes: string | null;
+  recordedBy: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
+
+export interface SerializedPurchaseReturnHistoryItem {
+  id: string;
+  returnNumber: string;
+  returnDate: string;
+  reason: string | null;
+  notes: string | null;
+  returnedBy: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  itemCount: number;
+  items?: {
+    id: string;
+    productName: string;
+    variantName: string | null;
+    sku: string | null;
+    quantityReturned: string;
+    unitCost: string;
+    lineTotal: string;
+  }[];
+}
+
+export interface SerializedPurchaseDetailDTO {
+  id: string;
+  organizationId: string;
+  purchaseNumber: string;
+  branchId: string;
+  supplierId: string;
+  status: PurchaseStatus;
+  paymentStatus: PurchasePaymentStatus;
+  orderDate: string;
+  expectedDate: string | null;
+  subtotal: string;
+  discountAmount: string;
+  taxAmount: string;
+  shippingAmount: string;
+  totalAmount: string;
+  paidAmount: string;
+  balanceDue: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  supplier: {
+    id: string;
+    name: string;
+    contactPerson: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    taxNumber: string | null;
+  };
+  branch: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  createdBy: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  items: SerializedPurchaseDetailItem[];
+  receipts: SerializedPurchaseReceiptHistoryItem[];
+  payments: SerializedPurchasePaymentHistoryItem[];
+  returns: SerializedPurchaseReturnHistoryItem[];
+}
+
+export interface PurchaseDetailActionResult {
+  success?: boolean;
+  error?: string;
+  purchase?: SerializedPurchaseDetailDTO;
+}
+
+export interface PurchaseMutationActionResult {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  purchaseId?: string;
+  purchaseNumber?: string;
+}

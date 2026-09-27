@@ -891,7 +891,7 @@ export async function updatePurchase(
         },
       },
     });
-  });
+  }, { timeout: 25000, maxWait: 10000 });
 }
 
 /**

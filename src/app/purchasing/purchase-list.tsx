@@ -17,6 +17,9 @@ interface PurchaseListProps {
   authorizedBranches: AuthorizedBranchDTO[];
   suppliers: { id: string; name: string }[];
   canMutatePurchases: boolean;
+  onOpenCreateModal?: () => void;
+  onSelectPurchase?: (purchaseId: string) => void;
+  refreshTrigger?: number;
 }
 
 export function PurchaseList({
@@ -26,6 +29,10 @@ export function PurchaseList({
   organizationId,
   authorizedBranches,
   suppliers,
+  canMutatePurchases,
+  onOpenCreateModal,
+  onSelectPurchase,
+  refreshTrigger,
 }: PurchaseListProps) {
   const [purchases, setPurchases] = useState<SerializedPurchaseListItem[]>(initialPurchases);
   const [totalCount, setTotalCount] = useState<number>(initialTotalCount);
@@ -59,7 +66,7 @@ export function PurchaseList({
 
   const isFirstMount = useRef(true);
 
-  // Re-fetch on filter change
+  // Re-fetch on filter change or refreshTrigger change
   useEffect(() => {
     if (isFirstMount.current) {
       isFirstMount.current = false;
@@ -105,7 +112,7 @@ export function PurchaseList({
     return () => {
       isCancelled = true;
     };
-  }, [debouncedSearch, status, paymentStatus, branchId, supplierId, dateFrom, dateTo, page, pageSize, organizationId, isFirstMount]);
+  }, [debouncedSearch, status, paymentStatus, branchId, supplierId, dateFrom, dateTo, page, pageSize, organizationId, refreshTrigger]);
 
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
@@ -200,6 +207,24 @@ export function PurchaseList({
 
   return (
     <div className="space-y-6">
+      {/* Header with New Purchase Order Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-950/40 p-4 rounded-xl border border-slate-800">
+        <div>
+          <h2 className="text-sm font-bold text-white tracking-tight">Purchase Orders Ledger</h2>
+          <p className="text-xs text-slate-400">View and track all procurement orders and vendor delivery commitments.</p>
+        </div>
+        {canMutatePurchases && (
+          <button
+            type="button"
+            onClick={onOpenCreateModal}
+            className="px-3.5 py-2 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/30 transition-all flex items-center gap-1.5 self-start sm:self-auto"
+          >
+            <span>+</span>
+            <span>New Purchase Order</span>
+          </button>
+        )}
+      </div>
+
       {/* KPI Summary Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4">
@@ -397,12 +422,13 @@ export function PurchaseList({
                 <th className="px-4 py-3 font-semibold text-right">Items</th>
                 <th className="px-4 py-3 font-semibold text-right">Total</th>
                 <th className="px-4 py-3 font-semibold text-right">Balance Due</th>
+                <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {purchases.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={10} className="px-4 py-12 text-center text-slate-500">
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-slate-400">No purchase orders found</p>
                       <p className="text-xs text-slate-600">
@@ -417,7 +443,8 @@ export function PurchaseList({
                 purchases.map((po) => (
                   <tr
                     key={po.id}
-                    className="hover:bg-slate-900/40 transition-colors"
+                    onClick={() => onSelectPurchase?.(po.id)}
+                    className="hover:bg-slate-900/60 transition-colors cursor-pointer group"
                   >
                     <td className="px-4 py-3 font-mono font-medium text-emerald-400">
                       {po.purchaseNumber}
@@ -448,6 +475,18 @@ export function PurchaseList({
                       ) : (
                         <span className="text-slate-500">$0.00</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectPurchase?.(po.id);
+                        }}
+                        className="px-2.5 py-1 rounded text-xs font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-colors"
+                      >
+                        Details &rarr;
+                      </button>
                     </td>
                   </tr>
                 ))

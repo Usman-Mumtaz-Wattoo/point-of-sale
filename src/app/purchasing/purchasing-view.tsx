@@ -6,9 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   type PurchasingPageInitialData,
   type SerializedSupplier,
+  type SerializedPurchaseDetailDTO,
 } from "./types";
 import { SupplierModal } from "./supplier-modal";
 import { PurchaseList } from "./purchase-list";
+import { PurchaseOrderModal } from "./purchase-order-modal";
+import { PurchaseDetailDrawer } from "./purchase-detail-drawer";
 import { listSuppliersAction, updateSupplierAction } from "./actions";
 
 interface PurchasingViewProps {
@@ -53,6 +56,44 @@ export function PurchasingView({ initialData }: PurchasingViewProps) {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [supplierToEdit, setSupplierToEdit] = useState<SerializedSupplier | null>(null);
+
+  // Purchase modal & drawer state
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [purchaseToEdit, setPurchaseToEdit] = useState<SerializedPurchaseDetailDTO | null>(null);
+  const [refreshPurchasesTrigger, setRefreshPurchasesTrigger] = useState(0);
+
+  const handleOpenCreatePurchase = () => {
+    setPurchaseToEdit(null);
+    setIsPurchaseModalOpen(true);
+  };
+
+  const handleSelectPurchase = (purchaseId: string) => {
+    setSelectedPurchaseId(purchaseId);
+    setIsDetailDrawerOpen(true);
+  };
+
+  const handleEditPurchaseFromDrawer = (po: SerializedPurchaseDetailDTO) => {
+    setIsDetailDrawerOpen(false);
+    setPurchaseToEdit(po);
+    setIsPurchaseModalOpen(true);
+  };
+
+  const handlePurchaseModalSuccess = (msg: string, newPurchaseId?: string) => {
+    setIsPurchaseModalOpen(false);
+    setFeedbackMessage(msg);
+    setRefreshPurchasesTrigger((prev) => prev + 1);
+    if (newPurchaseId) {
+      setSelectedPurchaseId(newPurchaseId);
+      setIsDetailDrawerOpen(true);
+    }
+  };
+
+  const handlePurchaseDrawerUpdated = (msg: string) => {
+    setFeedbackMessage(msg);
+    setRefreshPurchasesTrigger((prev) => prev + 1);
+  };
 
   // Debounce supplier search
   useEffect(() => {
@@ -224,6 +265,9 @@ export function PurchasingView({ initialData }: PurchasingViewProps) {
             authorizedBranches={initialData.authorizedBranches}
             suppliers={initialData.allActiveSuppliersForFilter}
             canMutatePurchases={initialData.canMutatePurchases}
+            onOpenCreateModal={handleOpenCreatePurchase}
+            onSelectPurchase={handleSelectPurchase}
+            refreshTrigger={refreshPurchasesTrigger}
           />
         )}
 
@@ -449,6 +493,28 @@ export function PurchasingView({ initialData }: PurchasingViewProps) {
           }}
           supplierToEdit={supplierToEdit}
           organizationId={initialData.organizationId}
+        />
+
+        {/* Purchase Order Create/Edit Modal */}
+        <PurchaseOrderModal
+          isOpen={isPurchaseModalOpen}
+          onClose={() => setIsPurchaseModalOpen(false)}
+          onSuccess={handlePurchaseModalSuccess}
+          purchaseToEdit={purchaseToEdit}
+          organizationId={initialData.organizationId}
+          authorizedBranches={initialData.authorizedBranches}
+          suppliers={initialData.allActiveSuppliersForFilter}
+        />
+
+        {/* Purchase Detail Drawer */}
+        <PurchaseDetailDrawer
+          isOpen={isDetailDrawerOpen}
+          purchaseId={selectedPurchaseId}
+          organizationId={initialData.organizationId}
+          canMutatePurchases={initialData.canMutatePurchases}
+          onClose={() => setIsDetailDrawerOpen(false)}
+          onEditPurchase={handleEditPurchaseFromDrawer}
+          onPurchaseUpdated={handlePurchaseDrawerUpdated}
         />
       </div>
     </main>
