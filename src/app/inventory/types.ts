@@ -100,6 +100,100 @@ export type StockMovementTypeValue =
   | "DAMAGE"
   | "WASTE";
 
+export interface RecordOpeningBalanceInput {
+  branchId: string;
+  productId: string;
+  variantId?: string | null;
+  quantity: string;
+  reorderLevel?: string | null;
+  reorderQuantity?: string | null;
+  reason?: string;
+  notes?: string;
+}
+
+export interface RecordStockInflowInput {
+  branchId: string;
+  productId: string;
+  variantId?: string | null;
+  quantity: string;
+  movementType: "ADJUSTMENT_IN";
+  reason?: string;
+  notes?: string;
+}
+
+export interface RecordStockOutflowInput {
+  branchId: string;
+  productId: string;
+  variantId?: string | null;
+  quantity: string;
+  movementType: "ADJUSTMENT_OUT" | "DAMAGE" | "WASTE";
+  reason?: string;
+  notes?: string;
+}
+
+export interface AdjustStockInput {
+  branchId: string;
+  productId: string;
+  variantId?: string | null;
+  newQuantity: string;
+  reason: string;
+  notes?: string;
+}
+
+export interface UpdateStockThresholdsInput {
+  branchId: string;
+  stockId: string;
+  reorderLevel?: string | null;
+  reorderQuantity?: string | null;
+}
+
+export interface SerializedStockMutationResult {
+  stock: {
+    id: string;
+    organizationId: string;
+    branchId: string;
+    productId: string;
+    variantId: string | null;
+    quantity: string;
+    reorderLevel: string | null;
+    reorderQuantity: string | null;
+  };
+  movement: {
+    id: string;
+    organizationId: string;
+    branchId: string;
+    productId: string;
+    variantId: string | null;
+    movementType: string;
+    quantityDelta: string;
+    quantityBefore: string;
+    quantityAfter: string;
+    referenceType: string | null;
+    referenceId: string | null;
+    reason: string | null;
+    notes: string | null;
+    performedByUserId: string | null;
+    createdAt: string;
+  };
+}
+
+export interface SerializedThresholdResult {
+  id: string;
+  reorderLevel: string | null;
+  reorderQuantity: string | null;
+}
+
+export interface SelectableCatalogItem {
+  productId: string;
+  variantId: string | null;
+  productName: string;
+  variantName: string | null;
+  sku: string;
+  isVariable: boolean;
+  unit: string;
+  currentStockInBranch?: string | null;
+}
+
 /**
  * Computes presentation stock status according to approved rules:
  * - Out of Stock: quantity <= 0

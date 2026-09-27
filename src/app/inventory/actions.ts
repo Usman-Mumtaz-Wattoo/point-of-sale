@@ -2,15 +2,23 @@
 
 import { Prisma } from "@prisma/client";
 import { getCurrentAppUser } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { type SystemRoleName } from "@/lib/roles";
 import {
   getInventorySummary,
   getBranchInventory,
+  recordOpeningBalance,
+  recordStockInflow,
+  recordStockOutflow,
+  adjustStock,
+  updateStockThresholds,
   INVENTORY_READ_ROLES,
   INVENTORY_MUTATION_ROLES,
   InventoryValidationError,
   InventoryNotFoundError,
   InventoryBranchAccessError,
+  InventoryConflictError,
+  InsufficientStockError,
   UnauthorizedRoleError,
   CrossTenantViolationError,
   MembershipNotFoundError,
@@ -25,10 +33,18 @@ import {
   type InventoryStockListResult,
   type InventoryActionResult,
   type SerializedInventoryStock,
+  type RecordOpeningBalanceInput,
+  type RecordStockInflowInput,
+  type RecordStockOutflowInput,
+  type AdjustStockInput,
+  type UpdateStockThresholdsInput,
+  type SerializedStockMutationResult,
+  type SerializedThresholdResult,
+  type SelectableCatalogItem,
 } from "./types";
 
 // Helper to convert Prisma Decimal and Date objects into JSON-safe primitives
-function serializeData<T>(obj: T): T {
+function serializeData<T>(obj: unknown): T {
   return JSON.parse(
     JSON.stringify(obj, (_key, value) => {
       if (
@@ -39,7 +55,30 @@ function serializeData<T>(obj: T): T {
       }
       return value;
     })
-  );
+  ) as T;
+}
+
+function translateInventoryError(error: unknown, fallbackMessage: string): string {
+  if (error instanceof InsufficientStockError) {
+    return "Not enough stock available. The current stock may have changed. Refresh and try again.";
+  }
+  if (error instanceof InventoryConflictError) {
+    return error.message || "A conflict occurred with the existing inventory record.";
+  }
+  if (
+    error instanceof InventoryValidationError ||
+    error instanceof InventoryNotFoundError ||
+    error instanceof InventoryBranchAccessError ||
+    error instanceof CrossTenantViolationError ||
+    error instanceof MembershipNotFoundError ||
+    error instanceof UnauthorizedRoleError ||
+    error instanceof BranchNotFoundError
+  ) {
+    return error.message;
+  }
+
+  console.error("Inventory action error:", error);
+  return fallbackMessage;
 }
 
 // ============================================================================
@@ -121,7 +160,7 @@ async function verifyServerActionTenantContext(
 }
 
 // ============================================================================
-// SERVER ACTIONS
+// READ ACTIONS
 // ============================================================================
 
 /**
@@ -156,22 +195,12 @@ export async function getInventorySummaryAction(
       data: summary,
     };
   } catch (error) {
-    if (
-      error instanceof InventoryValidationError ||
-      error instanceof InventoryNotFoundError ||
-      error instanceof InventoryBranchAccessError ||
-      error instanceof CrossTenantViolationError ||
-      error instanceof MembershipNotFoundError ||
-      error instanceof UnauthorizedRoleError ||
-      error instanceof BranchNotFoundError
-    ) {
-      return { success: false, error: error.message };
-    }
-
-    console.error("getInventorySummaryAction error:", error);
     return {
       success: false,
-      error: "An unexpected error occurred while retrieving the inventory summary.",
+      error: translateInventoryError(
+        error,
+        "An unexpected error occurred while retrieving the inventory summary."
+      ),
     };
   }
 }
@@ -272,22 +301,345 @@ export async function getBranchInventoryAction(
       }),
     };
   } catch (error) {
-    if (
-      error instanceof InventoryValidationError ||
-      error instanceof InventoryNotFoundError ||
-      error instanceof InventoryBranchAccessError ||
-      error instanceof CrossTenantViolationError ||
-      error instanceof MembershipNotFoundError ||
-      error instanceof UnauthorizedRoleError ||
-      error instanceof BranchNotFoundError
-    ) {
-      return { success: false, error: error.message };
-    }
-
-    console.error("getBranchInventoryAction error:", error);
     return {
       success: false,
-      error: "An unexpected error occurred while retrieving branch inventory.",
+      error: translateInventoryError(
+        error,
+        "An unexpected error occurred while retrieving branch inventory."
+      ),
+    };
+  }
+}
+
+/**
+ * Searches active catalog items (products and variants) in the verified organization
+ * for use in product selectors and mutation modals.
+ */
+export async function searchCatalogItemsAction(
+  branchId: string,
+  search?: string,
+  requestedOrgId?: string,
+  options?: InventoryServiceOptions
+): Promise<InventoryActionResult<SelectableCatalogItem[]>> {
+  if (!branchId?.trim()) {
+    return { success: false, error: "Branch ID is required." };
+  }
+
+  try {
+    const { organizationId } = await verifyServerActionTenantContext(
+      branchId.trim(),
+      requestedOrgId,
+      options,
+      false
+    );
+
+    const term = search?.trim();
+    const products = await db.product.findMany({
+      where: {
+        organizationId,
+        isActive: true,
+        ...(term
+          ? {
+              OR: [
+                { name: { contains: term, mode: "insensitive" } },
+                { sku: { contains: term, mode: "insensitive" } },
+                { variants: { some: { name: { contains: term, mode: "insensitive" } } } },
+                { variants: { some: { sku: { contains: term, mode: "insensitive" } } } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        variants: {
+          where: { isActive: true },
+          orderBy: { name: "asc" },
+        },
+        inventoryStocks: {
+          where: { branchId: branchId.trim() },
+          select: { variantId: true, quantity: true },
+        },
+      },
+      orderBy: { name: "asc" },
+      take: 25,
+    });
+
+    const items: SelectableCatalogItem[] = [];
+
+    for (const prod of products) {
+      if (prod.variants.length > 0) {
+        for (const variant of prod.variants) {
+          const matchingStock = prod.inventoryStocks.find((s) => s.variantId === variant.id);
+          items.push({
+            productId: prod.id,
+            variantId: variant.id,
+            productName: prod.name,
+            variantName: variant.name,
+            sku: variant.sku || prod.sku,
+            isVariable: true,
+            unit: prod.unit,
+            currentStockInBranch: matchingStock ? matchingStock.quantity.toString() : null,
+          });
+        }
+      } else {
+        const matchingStock = prod.inventoryStocks.find((s) => s.variantId === null);
+        items.push({
+          productId: prod.id,
+          variantId: null,
+          productName: prod.name,
+          variantName: null,
+          sku: prod.sku,
+          isVariable: false,
+          unit: prod.unit,
+          currentStockInBranch: matchingStock ? matchingStock.quantity.toString() : null,
+        });
+      }
+    }
+
+    return { success: true, data: items };
+  } catch (error) {
+    return {
+      success: false,
+      error: translateInventoryError(error, "Failed to search catalog items."),
+    };
+  }
+}
+
+// ============================================================================
+// MUTATION ACTIONS
+// ============================================================================
+
+/**
+ * Establishes initial stock balance for a product/variant at a branch.
+ */
+export async function recordOpeningBalanceAction(
+  input: RecordOpeningBalanceInput,
+  requestedOrgId?: string,
+  options?: InventoryServiceOptions
+): Promise<InventoryActionResult<SerializedStockMutationResult>> {
+  if (!input.branchId?.trim() || !input.productId?.trim()) {
+    return { success: false, error: "Branch ID and Product ID are required." };
+  }
+
+  try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      input.branchId.trim(),
+      requestedOrgId,
+      options,
+      true
+    );
+
+    const result = await recordOpeningBalance({
+      organizationId,
+      branchId: input.branchId.trim(),
+      productId: input.productId.trim(),
+      variantId: input.variantId?.trim() || null,
+      quantity: input.quantity,
+      reorderLevel: input.reorderLevel?.trim() ? input.reorderLevel.trim() : null,
+      reorderQuantity: input.reorderQuantity?.trim() ? input.reorderQuantity.trim() : null,
+      reason: input.reason?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      actorUser: user,
+    });
+
+    return {
+      success: true,
+      data: serializeData(result),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: translateInventoryError(
+        error,
+        "An unexpected error occurred while recording the opening balance."
+      ),
+    };
+  }
+}
+
+/**
+ * Records manual stock inflow (ADJUSTMENT_IN).
+ */
+export async function recordStockInflowAction(
+  input: RecordStockInflowInput,
+  requestedOrgId?: string,
+  options?: InventoryServiceOptions
+): Promise<InventoryActionResult<SerializedStockMutationResult>> {
+  if (!input.branchId?.trim() || !input.productId?.trim()) {
+    return { success: false, error: "Branch ID and Product ID are required." };
+  }
+
+  try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      input.branchId.trim(),
+      requestedOrgId,
+      options,
+      true
+    );
+
+    const result = await recordStockInflow({
+      organizationId,
+      branchId: input.branchId.trim(),
+      productId: input.productId.trim(),
+      variantId: input.variantId?.trim() || null,
+      quantity: input.quantity,
+      movementType: "ADJUSTMENT_IN",
+      reason: input.reason?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      actorUser: user,
+    });
+
+    return {
+      success: true,
+      data: serializeData(result),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: translateInventoryError(
+        error,
+        "An unexpected error occurred while recording stock inflow."
+      ),
+    };
+  }
+}
+
+/**
+ * Records manual stock outflow (ADJUSTMENT_OUT, DAMAGE, WASTE).
+ */
+export async function recordStockOutflowAction(
+  input: RecordStockOutflowInput,
+  requestedOrgId?: string,
+  options?: InventoryServiceOptions
+): Promise<InventoryActionResult<SerializedStockMutationResult>> {
+  if (!input.branchId?.trim() || !input.productId?.trim()) {
+    return { success: false, error: "Branch ID and Product ID are required." };
+  }
+
+  try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      input.branchId.trim(),
+      requestedOrgId,
+      options,
+      true
+    );
+
+    const result = await recordStockOutflow({
+      organizationId,
+      branchId: input.branchId.trim(),
+      productId: input.productId.trim(),
+      variantId: input.variantId?.trim() || null,
+      quantity: input.quantity,
+      movementType: input.movementType,
+      reason: input.reason?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      actorUser: user,
+    });
+
+    return {
+      success: true,
+      data: serializeData(result),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: translateInventoryError(
+        error,
+        "An unexpected error occurred while recording stock outflow."
+      ),
+    };
+  }
+}
+
+/**
+ * Reconciles stock to a target counted quantity (Stocktake / physical count).
+ */
+export async function adjustStockAction(
+  input: AdjustStockInput,
+  requestedOrgId?: string,
+  options?: InventoryServiceOptions
+): Promise<InventoryActionResult<SerializedStockMutationResult>> {
+  if (!input.branchId?.trim() || !input.productId?.trim()) {
+    return { success: false, error: "Branch ID and Product ID are required." };
+  }
+
+  try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      input.branchId.trim(),
+      requestedOrgId,
+      options,
+      true
+    );
+
+    const result = await adjustStock({
+      organizationId,
+      branchId: input.branchId.trim(),
+      productId: input.productId.trim(),
+      variantId: input.variantId?.trim() || null,
+      newQuantity: input.newQuantity,
+      reason: input.reason?.trim() || "Stock Reconciliation",
+      notes: input.notes?.trim() || undefined,
+      actorUser: user,
+    });
+
+    return {
+      success: true,
+      data: serializeData(result),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: translateInventoryError(
+        error,
+        "An unexpected error occurred while adjusting stock."
+      ),
+    };
+  }
+}
+
+/**
+ * Updates reorder level and reorder quantity thresholds for a stock item.
+ */
+export async function updateStockThresholdsAction(
+  input: UpdateStockThresholdsInput,
+  requestedOrgId?: string,
+  options?: InventoryServiceOptions
+): Promise<InventoryActionResult<SerializedThresholdResult>> {
+  if (!input.branchId?.trim() || !input.stockId?.trim()) {
+    return { success: false, error: "Branch ID and Stock ID are required." };
+  }
+
+  try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      input.branchId.trim(),
+      requestedOrgId,
+      options,
+      true
+    );
+
+    const result = await updateStockThresholds({
+      organizationId,
+      branchId: input.branchId.trim(),
+      stockId: input.stockId.trim(),
+      reorderLevel: input.reorderLevel !== undefined ? input.reorderLevel : undefined,
+      reorderQuantity: input.reorderQuantity !== undefined ? input.reorderQuantity : undefined,
+      actorUser: user,
+    });
+
+    return {
+      success: true,
+      data: serializeData({
+        id: result.id,
+        reorderLevel: result.reorderLevel ? result.reorderLevel.toString() : null,
+        reorderQuantity: result.reorderQuantity ? result.reorderQuantity.toString() : null,
+      }),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: translateInventoryError(
+        error,
+        "An unexpected error occurred while updating thresholds."
+      ),
     };
   }
 }

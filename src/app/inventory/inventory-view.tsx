@@ -4,11 +4,14 @@ import React, { useState, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getInventorySummaryAction, getBranchInventoryAction } from "./actions";
+import { InventoryModals, type ModalType } from "./inventory-modals";
 import type {
   AuthorizedBranchDTO,
   InventorySummaryDTO,
   InventoryStockListResult,
   SerializedInventoryStock,
+  SerializedStockMutationResult,
+  SerializedThresholdResult,
 } from "./types";
 
 interface InventoryViewProps {
@@ -42,9 +45,18 @@ export function InventoryView({
   const [currentPage, setCurrentPage] = useState<number>(initialInventory.page);
   const [isPending, startTransition] = useTransition();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [lastAuditResult, setLastAuditResult] = useState<
+    SerializedStockMutationResult | SerializedThresholdResult | null
+  >(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  const selectedBranch = initialBranches.find((b) => b.id === selectedBranchId) || initialBranches[0];
+  // Modal State
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [modalTargetStock, setModalTargetStock] = useState<SerializedInventoryStock | null>(null);
+
+  const selectedBranch =
+    initialBranches.find((b) => b.id === selectedBranchId) || initialBranches[0];
 
   // Fetch data function
   const loadData = useCallback(
@@ -94,7 +106,6 @@ export function InventoryView({
     setSearchQuery("");
     setActiveSearch("");
 
-    // Update URL query param cleanly without full reload
     const currentParams = new URLSearchParams(searchParams?.toString() || "");
     currentParams.set("branch", newBranchId);
     router.replace(`?${currentParams.toString()}`);
@@ -129,6 +140,23 @@ export function InventoryView({
     loadData(selectedBranchId, newPage, activeSearch);
   };
 
+  // Handle Modal Openings
+  const openModal = (type: ModalType, item: SerializedInventoryStock | null = null) => {
+    setModalTargetStock(item);
+    setActiveModal(type);
+  };
+
+  const handleMutationSuccess = (
+    result: SerializedStockMutationResult | SerializedThresholdResult | null,
+    message: string
+  ) => {
+    setSuccessMessage(message);
+    setLastAuditResult(result);
+    setActiveModal(null);
+    setModalTargetStock(null);
+    loadData(selectedBranchId, currentPage, activeSearch);
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header & Context Bar */}
@@ -158,7 +186,7 @@ export function InventoryView({
           </div>
         </div>
 
-        {/* Branch Selector & Refresh Controls */}
+        {/* Branch Selector & Controls */}
         <div className="flex flex-wrap items-center gap-3">
           {initialBranches.length > 1 ? (
             <div className="flex items-center gap-2">
@@ -200,6 +228,82 @@ export function InventoryView({
           </button>
         </div>
       </div>
+
+      {/* Mutation Operations Toolbar (Visible only to OWNER, MANAGER, INVENTORY_MANAGER) */}
+      {canMutate && (
+        <div className="flex flex-wrap items-center gap-2.5 p-3 rounded-xl bg-slate-900/40 border border-slate-800">
+          <span className="text-xs font-semibold text-slate-400 mr-1 uppercase tracking-wider text-[11px]">
+            Stock Operations:
+          </span>
+          <button
+            id="btn-open-balance"
+            type="button"
+            onClick={() => openModal("OPENING_BALANCE")}
+            className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            <span>✨</span>
+            <span>Record Opening Balance</span>
+          </button>
+          <button
+            id="btn-add-stock"
+            type="button"
+            onClick={() => openModal("INFLOW")}
+            className="px-3 py-1.5 rounded-lg bg-emerald-700/20 hover:bg-emerald-700/30 text-emerald-300 text-xs font-semibold border border-emerald-600/30 transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            <span>➕</span>
+            <span>Add Stock (Inflow)</span>
+          </button>
+          <button
+            id="btn-deduct-stock"
+            type="button"
+            onClick={() => openModal("OUTFLOW")}
+            className="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-semibold border border-rose-500/30 transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            <span>➖</span>
+            <span>Issue Stock (Outflow)</span>
+          </button>
+          <button
+            id="btn-adjust-stock"
+            type="button"
+            onClick={() => openModal("ADJUST")}
+            className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-semibold border border-indigo-500/30 transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            <span>📋</span>
+            <span>Physical Count / Stocktake</span>
+          </button>
+        </div>
+      )}
+
+      {/* Success / Audit Banner */}
+      {successMessage && (
+        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg shadow-emerald-950/20">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 font-semibold text-sm text-emerald-200">
+              <span>✅</span>
+              <span>{successMessage}</span>
+            </div>
+            {lastAuditResult && "movement" in lastAuditResult && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-emerald-400 font-mono">
+                <span>Movement: {lastAuditResult.movement.movementType}</span>
+                <span>Delta: {lastAuditResult.movement.quantityDelta}</span>
+                <span>
+                  Resulting Stock: <strong>{lastAuditResult.movement.quantityAfter}</strong>
+                </span>
+                <span>Branch: {selectedBranch.name}</span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              setSuccessMessage(null);
+              setLastAuditResult(null);
+            }}
+            className="text-xs text-emerald-400 hover:text-emerald-200 underline self-start md:self-auto"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Error Banner */}
       {errorMessage && (
@@ -272,7 +376,6 @@ export function InventoryView({
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
         {/* Table Toolbar */}
         <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-          {/* Search Form */}
           <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full sm:w-80">
             <div className="relative w-full">
               <input
@@ -304,7 +407,6 @@ export function InventoryView({
             </button>
           </form>
 
-          {/* Sync indicator */}
           <div className="text-[11px] text-slate-500 flex items-center gap-2">
             {activeSearch && (
               <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300">
@@ -328,21 +430,38 @@ export function InventoryView({
                 <th className="py-3 px-4 text-right">Reorder Level</th>
                 <th className="py-3 px-4 text-right">Reorder Qty</th>
                 <th className="py-3 px-4 text-center">Status</th>
+                {canMutate && <th className="py-3 px-4 text-center">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {inventory.items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 space-y-2">
+                  <td
+                    colSpan={canMutate ? 9 : 8}
+                    className="py-12 text-center text-slate-400 space-y-2"
+                  >
                     <div className="text-3xl">📭</div>
                     <div className="text-sm font-medium text-slate-300">
-                      {activeSearch ? "No matching inventory records found" : "No inventory records in this branch"}
+                      {activeSearch
+                        ? "No matching inventory records found"
+                        : "No inventory records in this branch"}
                     </div>
                     <p className="text-xs text-slate-500 max-w-sm mx-auto">
                       {activeSearch
                         ? `No items found matching "${activeSearch}". Try adjusting your search term.`
                         : "Stock records will appear here as opening balances are recorded or purchase receipts are posted."}
                     </p>
+                    {canMutate && !activeSearch && (
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={() => openModal("OPENING_BALANCE")}
+                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+                        >
+                          Record First Opening Balance &rarr;
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -428,6 +547,44 @@ export function InventoryView({
                           </span>
                         )}
                       </td>
+                      {canMutate && (
+                        <td className="py-2.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openModal("INFLOW", item)}
+                              title="Add Stock (Inflow)"
+                              className="px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/20 transition-colors text-[11px]"
+                            >
+                              + Add
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openModal("OUTFLOW", item)}
+                              title="Deduct / Issue Stock"
+                              className="px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-semibold border border-rose-500/20 transition-colors text-[11px]"
+                            >
+                              - Deduct
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openModal("ADJUST", item)}
+                              title="Physical Count Reconciliation"
+                              className="px-2 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/20 transition-colors text-[11px]"
+                            >
+                              Adjust
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openModal("THRESHOLDS", item)}
+                              title="Set Reorder Thresholds"
+                              className="px-1.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors text-[11px]"
+                            >
+                              ⚙
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -485,6 +642,19 @@ export function InventoryView({
           &larr; Back to Dashboard
         </Link>
       </div>
+
+      {/* Operation Modals */}
+      <InventoryModals
+        modalType={activeModal}
+        selectedBranch={selectedBranch}
+        orgId={orgId}
+        targetStockItem={modalTargetStock}
+        onClose={() => {
+          setActiveModal(null);
+          setModalTargetStock(null);
+        }}
+        onSuccess={handleMutationSuccess}
+      />
     </div>
   );
 }
