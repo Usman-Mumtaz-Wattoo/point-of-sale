@@ -632,7 +632,7 @@ export async function getInventoryHistory(params: {
         variant: { select: { id: true, name: true, sku: true } },
         performedBy: { select: { id: true, name: true, email: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: params.take ?? 50,
       skip: params.skip ?? 0,
     }),

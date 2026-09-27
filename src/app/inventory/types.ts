@@ -49,13 +49,31 @@ export interface SerializedInventoryStock {
   status: StockStatusType;
 }
 
+export interface SerializedMovementProduct {
+  id: string;
+  name: string;
+  sku: string;
+}
+
+export interface SerializedMovementVariant {
+  id: string;
+  name: string;
+  sku: string | null;
+}
+
+export interface SerializedMovementUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export interface SerializedInventoryMovement {
   id: string;
   organizationId: string;
   branchId: string;
   productId: string;
   variantId: string | null;
-  movementType: string;
+  movementType: StockMovementTypeValue;
   quantityDelta: string;
   quantityBefore: string;
   quantityAfter: string;
@@ -65,6 +83,17 @@ export interface SerializedInventoryMovement {
   notes: string | null;
   performedByUserId: string | null;
   createdAt: string;
+  product?: SerializedMovementProduct;
+  variant?: SerializedMovementVariant | null;
+  performedBy?: SerializedMovementUser | null;
+}
+
+export interface InventoryHistoryListResult {
+  items: SerializedInventoryMovement[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 export interface InventoryStockListResult {

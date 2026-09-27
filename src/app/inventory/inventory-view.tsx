@@ -5,13 +5,16 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getInventorySummaryAction, getBranchInventoryAction } from "./actions";
 import { InventoryModals, type ModalType } from "./inventory-modals";
-import type {
-  AuthorizedBranchDTO,
-  InventorySummaryDTO,
-  InventoryStockListResult,
-  SerializedInventoryStock,
-  SerializedStockMutationResult,
-  SerializedThresholdResult,
+import { StockDetailDrawer } from "./stock-detail-drawer";
+import { MovementHistoryView } from "./movement-history-view";
+import {
+  computeStockStatus,
+  type AuthorizedBranchDTO,
+  type InventorySummaryDTO,
+  type InventoryStockListResult,
+  type SerializedInventoryStock,
+  type SerializedStockMutationResult,
+  type SerializedThresholdResult,
 } from "./types";
 
 interface InventoryViewProps {
@@ -55,6 +58,13 @@ export function InventoryView({
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [modalTargetStock, setModalTargetStock] = useState<SerializedInventoryStock | null>(null);
 
+  // Step 16C: View Mode & Stock Detail Drawer State
+  const [activeViewTab, setActiveViewTab] = useState<"BALANCES" | "LEDGER">("BALANCES");
+  const [selectedStockForDrawer, setSelectedStockForDrawer] = useState<SerializedInventoryStock | null>(null);
+  const [ledgerProductId, setLedgerProductId] = useState<string | null>(null);
+  const [ledgerVariantId, setLedgerVariantId] = useState<string | null>(null);
+  const [ledgerItemName, setLedgerItemName] = useState<string | null>(null);
+
   const selectedBranch =
     initialBranches.find((b) => b.id === selectedBranchId) || initialBranches[0];
 
@@ -92,6 +102,13 @@ export function InventoryView({
         if (inventoryRes.data) {
           setInventory(inventoryRes.data);
           setCurrentPage(inventoryRes.data.page);
+
+          // Keep drawer stock item up-to-date if currently open
+          setSelectedStockForDrawer((current) => {
+            if (!current) return null;
+            const updated = inventoryRes.data?.items.find((i) => i.id === current.id);
+            return updated || current;
+          });
         }
         setLastRefreshed(new Date());
       });
@@ -146,6 +163,26 @@ export function InventoryView({
     setActiveModal(type);
   };
 
+  // Handle View Full Movement History from Drawer
+  const handleViewFullHistory = (
+    productId: string,
+    variantId?: string | null,
+    itemName?: string
+  ) => {
+    setSelectedStockForDrawer(null);
+    setLedgerProductId(productId);
+    setLedgerVariantId(variantId || null);
+    setLedgerItemName(itemName || null);
+    setActiveViewTab("LEDGER");
+  };
+
+  // Clear Item Filter in Movement History Ledger
+  const handleClearLedgerItemFilter = () => {
+    setLedgerProductId(null);
+    setLedgerVariantId(null);
+    setLedgerItemName(null);
+  };
+
   const handleMutationSuccess = (
     result: SerializedStockMutationResult | SerializedThresholdResult | null,
     message: string
@@ -154,6 +191,47 @@ export function InventoryView({
     setLastAuditResult(result);
     setActiveModal(null);
     setModalTargetStock(null);
+
+    // If detail drawer is open, keep its item state in sync with mutation result
+    if (selectedStockForDrawer && result) {
+      if ("movement" in result) {
+        const mutationRes = result as SerializedStockMutationResult;
+        if (selectedStockForDrawer.id === mutationRes.stock.id) {
+          setSelectedStockForDrawer((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  quantity: mutationRes.movement.quantityAfter,
+                  status: computeStockStatus(
+                    mutationRes.movement.quantityAfter,
+                    prev.reorderLevel
+                  ),
+                  updatedAt: new Date().toISOString(),
+                }
+              : null
+          );
+        }
+      } else if ("reorderLevel" in result) {
+        const thresholdRes = result as SerializedThresholdResult;
+        if (selectedStockForDrawer.id === thresholdRes.id) {
+          setSelectedStockForDrawer((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  reorderLevel: thresholdRes.reorderLevel,
+                  reorderQuantity: thresholdRes.reorderQuantity,
+                  status: computeStockStatus(
+                    prev.quantity,
+                    thresholdRes.reorderLevel
+                  ),
+                  updatedAt: new Date().toISOString(),
+                }
+              : null
+          );
+        }
+      }
+    }
+
     loadData(selectedBranchId, currentPage, activeSearch);
   };
 
@@ -321,317 +399,391 @@ export function InventoryView({
         </div>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {/* Total Tracked */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-2">
-            <span>Total Tracked</span>
-            <span className="p-1 rounded bg-slate-800 text-slate-300">📊</span>
-          </div>
-          <div className="text-2xl font-bold text-white tracking-tight">
-            {summary.totalTracked.toLocaleString()}
-          </div>
-          <span className="text-[11px] text-slate-500 mt-1">Distinct stock records</span>
-        </div>
-
-        {/* In Stock */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-emerald-400 text-xs font-medium mb-2">
-            <span>In Stock</span>
-            <span className="p-1 rounded bg-emerald-500/10 border border-emerald-500/20">✅</span>
-          </div>
-          <div className="text-2xl font-bold text-emerald-400 tracking-tight">
-            {summary.inStockCount.toLocaleString()}
-          </div>
-          <span className="text-[11px] text-slate-500 mt-1">Healthy balance</span>
-        </div>
-
-        {/* Low Stock */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-amber-400 text-xs font-medium mb-2">
-            <span>Low Stock</span>
-            <span className="p-1 rounded bg-amber-500/10 border border-amber-500/20">⚠️</span>
-          </div>
-          <div className="text-2xl font-bold text-amber-400 tracking-tight">
-            {summary.lowStockCount.toLocaleString()}
-          </div>
-          <span className="text-[11px] text-slate-500 mt-1">At or below reorder level</span>
-        </div>
-
-        {/* Out of Stock */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-rose-400 text-xs font-medium mb-2">
-            <span>Out of Stock</span>
-            <span className="p-1 rounded bg-rose-500/10 border border-rose-500/20">⛔</span>
-          </div>
-          <div className="text-2xl font-bold text-rose-400 tracking-tight">
-            {summary.outOfStockCount.toLocaleString()}
-          </div>
-          <span className="text-[11px] text-slate-500 mt-1">Zero or depleted balance</span>
-        </div>
+      {/* View Mode Tabs: Stock Balances | Movement History Ledger */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <button
+          type="button"
+          id="tab-stock-balances"
+          onClick={() => setActiveViewTab("BALANCES")}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            activeViewTab === "BALANCES"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
+              : "bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800 hover:bg-slate-800/50"
+          }`}
+        >
+          <span>📦</span>
+          <span>Stock Balances</span>
+        </button>
+        <button
+          type="button"
+          id="tab-movement-history"
+          onClick={() => setActiveViewTab("LEDGER")}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            activeViewTab === "LEDGER"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/30"
+              : "bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800 hover:bg-slate-800/50"
+          }`}
+        >
+          <span>📜</span>
+          <span>Movement History Ledger</span>
+          {ledgerItemName && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-700 font-normal">
+              1 Filter Active
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Main Stock Table Container */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
-        {/* Table Toolbar */}
-        <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full sm:w-80">
-            <div className="relative w-full">
-              <input
-                id="inventory-search-input"
-                type="text"
-                placeholder="Search Product / Variant / SKU..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-8 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
-              />
-              <span className="absolute left-2.5 top-2 text-slate-500 text-xs">🔍</span>
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={handleClearSearch}
-                  className="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-200 text-xs"
-                >
-                  ✕
-                </button>
-              )}
+      {activeViewTab === "BALANCES" ? (
+        <>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Total Tracked */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-2">
+                <span>Total Tracked</span>
+                <span className="p-1 rounded bg-slate-800 text-slate-300">📊</span>
+              </div>
+              <div className="text-2xl font-bold text-white tracking-tight">
+                {summary.totalTracked.toLocaleString()}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1">Distinct stock records</span>
             </div>
-            <button
-              id="inventory-search-btn"
-              type="submit"
-              disabled={isPending}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
-            >
-              Search
-            </button>
-          </form>
 
-          <div className="text-[11px] text-slate-500 flex items-center gap-2">
-            {activeSearch && (
-              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                Filter: &quot;{activeSearch}&quot;
-              </span>
-            )}
-            <span>Last updated: {lastRefreshed.toLocaleTimeString()}</span>
+            {/* In Stock */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-emerald-400 text-xs font-medium mb-2">
+                <span>In Stock</span>
+                <span className="p-1 rounded bg-emerald-500/10 border border-emerald-500/20">✅</span>
+              </div>
+              <div className="text-2xl font-bold text-emerald-400 tracking-tight">
+                {summary.inStockCount.toLocaleString()}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1">Healthy balance</span>
+            </div>
+
+            {/* Low Stock */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-amber-400 text-xs font-medium mb-2">
+                <span>Low Stock</span>
+                <span className="p-1 rounded bg-amber-500/10 border border-amber-500/20">⚠️</span>
+              </div>
+              <div className="text-2xl font-bold text-amber-400 tracking-tight">
+                {summary.lowStockCount.toLocaleString()}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1">At or below reorder level</span>
+            </div>
+
+            {/* Out of Stock */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-rose-400 text-xs font-medium mb-2">
+                <span>Out of Stock</span>
+                <span className="p-1 rounded bg-rose-500/10 border border-rose-500/20">⛔</span>
+              </div>
+              <div className="text-2xl font-bold text-rose-400 tracking-tight">
+                {summary.outOfStockCount.toLocaleString()}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1">Zero or depleted balance</span>
+            </div>
           </div>
-        </div>
 
-        {/* Stock Items Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 font-semibold uppercase tracking-wider">
-                <th className="py-3 px-4">Product / Item</th>
-                <th className="py-3 px-4">Variant</th>
-                <th className="py-3 px-4">SKU</th>
-                <th className="py-3 px-4 text-right">Quantity</th>
-                <th className="py-3 px-4">Unit</th>
-                <th className="py-3 px-4 text-right">Reorder Level</th>
-                <th className="py-3 px-4 text-right">Reorder Qty</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                {canMutate && <th className="py-3 px-4 text-center">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {inventory.items.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={canMutate ? 9 : 8}
-                    className="py-12 text-center text-slate-400 space-y-2"
-                  >
-                    <div className="text-3xl">📭</div>
-                    <div className="text-sm font-medium text-slate-300">
-                      {activeSearch
-                        ? "No matching inventory records found"
-                        : "No inventory records in this branch"}
-                    </div>
-                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                      {activeSearch
-                        ? `No items found matching "${activeSearch}". Try adjusting your search term.`
-                        : "Stock records will appear here as opening balances are recorded or purchase receipts are posted."}
-                    </p>
-                    {canMutate && !activeSearch && (
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={() => openModal("OPENING_BALANCE")}
-                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
-                        >
-                          Record First Opening Balance &rarr;
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                inventory.items.map((item: SerializedInventoryStock) => {
-                  const effectiveSku = item.variant?.sku || item.product.sku;
-
-                  return (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-slate-800/30 transition-colors group"
+          {/* Main Stock Table Container */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+            {/* Table Toolbar */}
+            <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full sm:w-80">
+                <div className="relative w-full">
+                  <input
+                    id="inventory-search-input"
+                    type="text"
+                    placeholder="Search Product / Variant / SKU..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-8 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  />
+                  <span className="absolute left-2.5 top-2 text-slate-500 text-xs">🔍</span>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-200 text-xs"
                     >
-                      <td className="py-3 px-4 font-medium text-white">
-                        <div className="flex flex-col">
-                          <span>{item.product.name}</span>
-                          {!item.product.isActive && (
-                            <span className="text-[10px] text-rose-400 font-normal">
-                              Inactive in Catalog
-                            </span>
-                          )}
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <button
+                  id="inventory-search-btn"
+                  type="submit"
+                  disabled={isPending}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  Search
+                </button>
+              </form>
+
+              <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                {activeSearch && (
+                  <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                    Filter: &quot;{activeSearch}&quot;
+                  </span>
+                )}
+                <span>Last updated: {lastRefreshed.toLocaleTimeString()}</span>
+              </div>
+            </div>
+
+            {/* Stock Items Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 font-semibold uppercase tracking-wider">
+                    <th className="py-3 px-4">Product / Item</th>
+                    <th className="py-3 px-4">Variant</th>
+                    <th className="py-3 px-4">SKU</th>
+                    <th className="py-3 px-4 text-right">Quantity</th>
+                    <th className="py-3 px-4">Unit</th>
+                    <th className="py-3 px-4 text-right">Reorder Level</th>
+                    <th className="py-3 px-4 text-right">Reorder Qty</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {inventory.items.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-slate-400 space-y-2">
+                        <div className="text-3xl">📭</div>
+                        <div className="text-sm font-medium text-slate-300">
+                          {activeSearch
+                            ? "No matching inventory records found"
+                            : "No inventory records in this branch"}
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-slate-300">
-                        {item.variant ? (
-                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700/60">
-                            {item.variant.name}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500 italic">Standard</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 font-mono text-slate-300">
-                        {effectiveSku || "—"}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono font-semibold">
-                        <span
-                          className={
-                            item.status === "OUT_OF_STOCK"
-                              ? "text-rose-400"
-                              : item.status === "LOW_STOCK"
-                              ? "text-amber-400"
-                              : "text-emerald-400"
-                          }
-                        >
-                          {Number(item.quantity).toLocaleString(undefined, {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 3,
-                          })}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-400 uppercase">
-                        {item.product.unit || "PCS"}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-slate-300">
-                        {item.reorderLevel !== null
-                          ? Number(item.reorderLevel).toLocaleString(undefined, {
-                              minimumFractionDigits: 0,
-                              maximumFractionDigits: 3,
-                            })
-                          : "—"}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-slate-300">
-                        {item.reorderQuantity !== null
-                          ? Number(item.reorderQuantity).toLocaleString(undefined, {
-                              minimumFractionDigits: 0,
-                              maximumFractionDigits: 3,
-                            })
-                          : "—"}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {item.status === "OUT_OF_STOCK" && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                            Out of Stock
-                          </span>
-                        )}
-                        {item.status === "LOW_STOCK" && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                            Low Stock
-                          </span>
-                        )}
-                        {item.status === "IN_STOCK" && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            In Stock
-                          </span>
-                        )}
-                      </td>
-                      {canMutate && (
-                        <td className="py-2.5 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                        <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                          {activeSearch
+                            ? `No items found matching "${activeSearch}". Try adjusting your search term.`
+                            : "Stock records will appear here as opening balances are recorded or purchase receipts are posted."}
+                        </p>
+                        {canMutate && !activeSearch && (
+                          <div className="pt-2">
                             <button
                               type="button"
-                              onClick={() => openModal("INFLOW", item)}
-                              title="Add Stock (Inflow)"
-                              className="px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/20 transition-colors text-[11px]"
+                              onClick={() => openModal("OPENING_BALANCE")}
+                              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
                             >
-                              + Add
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openModal("OUTFLOW", item)}
-                              title="Deduct / Issue Stock"
-                              className="px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-semibold border border-rose-500/20 transition-colors text-[11px]"
-                            >
-                              - Deduct
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openModal("ADJUST", item)}
-                              title="Physical Count Reconciliation"
-                              className="px-2 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/20 transition-colors text-[11px]"
-                            >
-                              Adjust
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openModal("THRESHOLDS", item)}
-                              title="Set Reorder Thresholds"
-                              className="px-1.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors text-[11px]"
-                            >
-                              ⚙
+                              Record First Opening Balance &rarr;
                             </button>
                           </div>
-                        </td>
-                      )}
+                        )}
+                      </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    inventory.items.map((item: SerializedInventoryStock) => {
+                      const effectiveSku = item.variant?.sku || item.product.sku;
 
-        {/* Pagination Footer */}
-        {inventory.totalCount > 0 && (
-          <div className="p-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
-            <div>
-              Showing{" "}
-              <span className="font-semibold text-slate-200">
-                {(inventory.page - 1) * inventory.pageSize + 1}
-              </span>{" "}
-              to{" "}
-              <span className="font-semibold text-slate-200">
-                {Math.min(inventory.page * inventory.pageSize, inventory.totalCount)}
-              </span>{" "}
-              of <span className="font-semibold text-slate-200">{inventory.totalCount}</span> items
+                      return (
+                        <tr
+                          key={item.id}
+                          onClick={() => setSelectedStockForDrawer(item)}
+                          className="hover:bg-slate-800/40 cursor-pointer transition-colors group"
+                        >
+                          <td className="py-3 px-4 font-medium text-white">
+                            <div className="flex flex-col">
+                              <span className="group-hover:text-emerald-300 transition-colors">
+                                {item.product.name}
+                              </span>
+                              {!item.product.isActive && (
+                                <span className="text-[10px] text-rose-400 font-normal">
+                                  Inactive in Catalog
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-slate-300">
+                            {item.variant ? (
+                              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700/60">
+                                {item.variant.name}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500 italic">Standard</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-slate-300">
+                            {effectiveSku || "—"}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-semibold">
+                            <span
+                              className={
+                                item.status === "OUT_OF_STOCK"
+                                  ? "text-rose-400"
+                                  : item.status === "LOW_STOCK"
+                                  ? "text-amber-400"
+                                  : "text-emerald-400"
+                              }
+                            >
+                              {Number(item.quantity).toLocaleString(undefined, {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 3,
+                              })}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-400 uppercase">
+                            {item.product.unit || "PCS"}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-slate-300">
+                            {item.reorderLevel !== null
+                              ? Number(item.reorderLevel).toLocaleString(undefined, {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 3,
+                                })
+                              : "—"}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-slate-300">
+                            {item.reorderQuantity !== null
+                              ? Number(item.reorderQuantity).toLocaleString(undefined, {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 3,
+                                })
+                              : "—"}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {item.status === "OUT_OF_STOCK" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                Out of Stock
+                              </span>
+                            )}
+                            {item.status === "LOW_STOCK" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                Low Stock
+                              </span>
+                            )}
+                            {item.status === "IN_STOCK" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                In Stock
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedStockForDrawer(item);
+                                }}
+                                title="View stock details and recent movements"
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold border border-slate-700 transition-colors text-[11px]"
+                              >
+                                View
+                              </button>
+                              {canMutate && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openModal("INFLOW", item);
+                                    }}
+                                    title="Add Stock (Inflow)"
+                                    className="px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/20 transition-colors text-[11px]"
+                                  >
+                                    + Add
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openModal("OUTFLOW", item);
+                                    }}
+                                    title="Deduct / Issue Stock"
+                                    className="px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-semibold border border-rose-500/20 transition-colors text-[11px]"
+                                  >
+                                    - Deduct
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openModal("ADJUST", item);
+                                    }}
+                                    title="Physical Count Reconciliation"
+                                    className="px-2 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/20 transition-colors text-[11px]"
+                                  >
+                                    Adjust
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openModal("THRESHOLDS", item);
+                                    }}
+                                    title="Set Reorder Thresholds"
+                                    className="px-1.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors text-[11px]"
+                                  >
+                                    ⚙
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                id="pagination-prev-btn"
-                onClick={() => handlePageChange(inventory.page - 1)}
-                disabled={inventory.page <= 1 || isPending}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
-              >
-                &larr; Previous
-              </button>
-              <span className="px-2 py-1 text-slate-300 font-mono">
-                Page {inventory.page} / {inventory.totalPages}
-              </span>
-              <button
-                id="pagination-next-btn"
-                onClick={() => handlePageChange(inventory.page + 1)}
-                disabled={inventory.page >= inventory.totalPages || isPending}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
-              >
-                Next &rarr;
-              </button>
-            </div>
+            {/* Pagination Footer */}
+            {inventory.totalCount > 0 && (
+              <div className="p-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+                <div>
+                  Showing{" "}
+                  <span className="font-semibold text-slate-200">
+                    {(inventory.page - 1) * inventory.pageSize + 1}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-semibold text-slate-200">
+                    {Math.min(inventory.page * inventory.pageSize, inventory.totalCount)}
+                  </span>{" "}
+                  of <span className="font-semibold text-slate-200">{inventory.totalCount}</span> items
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    id="pagination-prev-btn"
+                    onClick={() => handlePageChange(inventory.page - 1)}
+                    disabled={inventory.page <= 1 || isPending}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                  >
+                    &larr; Previous
+                  </button>
+                  <span className="px-2 py-1 text-slate-300 font-mono">
+                    Page {inventory.page} / {inventory.totalPages}
+                  </span>
+                  <button
+                    id="pagination-next-btn"
+                    onClick={() => handlePageChange(inventory.page + 1)}
+                    disabled={inventory.page >= inventory.totalPages || isPending}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                  >
+                    Next &rarr;
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        /* Full Movement History Ledger Tab */
+        <MovementHistoryView
+          branch={selectedBranch}
+          orgId={orgId}
+          initialProductId={ledgerProductId}
+          initialVariantId={ledgerVariantId}
+          initialItemName={ledgerItemName}
+          onClearItemFilter={handleClearLedgerItemFilter}
+        />
+      )}
 
       {/* Navigation Footer */}
       <div className="flex items-center justify-between pt-2">
@@ -642,6 +794,18 @@ export function InventoryView({
           &larr; Back to Dashboard
         </Link>
       </div>
+
+      {/* Stock Detail Drawer */}
+      <StockDetailDrawer
+        isOpen={!!selectedStockForDrawer}
+        item={selectedStockForDrawer}
+        branch={selectedBranch}
+        orgId={orgId}
+        canMutate={canMutate}
+        onClose={() => setSelectedStockForDrawer(null)}
+        onOpenModal={(type, itm) => openModal(type, itm)}
+        onViewFullHistory={handleViewFullHistory}
+      />
 
       {/* Operation Modals */}
       <InventoryModals

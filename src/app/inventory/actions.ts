@@ -1,12 +1,13 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type StockMovementType } from "@prisma/client";
 import { getCurrentAppUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { type SystemRoleName } from "@/lib/roles";
 import {
   getInventorySummary,
   getBranchInventory,
+  getInventoryHistory,
   recordOpeningBalance,
   recordStockInflow,
   recordStockOutflow,
@@ -33,6 +34,9 @@ import {
   type InventoryStockListResult,
   type InventoryActionResult,
   type SerializedInventoryStock,
+  type SerializedInventoryMovement,
+  type InventoryHistoryListResult,
+  type StockMovementTypeValue,
   type RecordOpeningBalanceInput,
   type RecordStockInflowInput,
   type RecordStockOutflowInput,
@@ -306,6 +310,127 @@ export async function getBranchInventoryAction(
       error: translateInventoryError(
         error,
         "An unexpected error occurred while retrieving branch inventory."
+      ),
+    };
+  }
+}
+
+/**
+ * Retrieves paginated branch inventory movements with deterministic sorting.
+ */
+export async function getInventoryHistoryAction(
+  params: {
+    branchId: string;
+    productId?: string;
+    variantId?: string;
+    movementType?: StockMovementTypeValue;
+    page?: number;
+    pageSize?: number;
+    take?: number;
+    skip?: number;
+  },
+  requestedOrgId?: string,
+  options?: InventoryServiceOptions
+): Promise<InventoryActionResult<InventoryHistoryListResult>> {
+  if (!params.branchId?.trim()) {
+    return { success: false, error: "Branch ID is required." };
+  }
+
+  try {
+    const { organizationId, user } = await verifyServerActionTenantContext(
+      params.branchId.trim(),
+      requestedOrgId,
+      options,
+      false // Read permission check
+    );
+
+    const pageSize = params.pageSize
+      ? Math.min(100, Math.max(1, params.pageSize))
+      : params.take
+      ? Math.min(100, Math.max(1, params.take))
+      : 50;
+
+    const page = params.page
+      ? Math.max(1, params.page)
+      : params.skip !== undefined
+      ? Math.floor(params.skip / pageSize) + 1
+      : 1;
+
+    const skip =
+      params.skip !== undefined ? Math.max(0, params.skip) : (page - 1) * pageSize;
+    const take =
+      params.take !== undefined ? Math.min(100, Math.max(1, params.take)) : pageSize;
+
+    const result = await getInventoryHistory({
+      organizationId,
+      branchId: params.branchId.trim(),
+      productId: params.productId?.trim() || undefined,
+      variantId: params.variantId?.trim() || undefined,
+      movementType: params.movementType as StockMovementType | undefined,
+      take,
+      skip,
+      actorUser: user,
+    });
+
+    const totalPages = Math.ceil(result.totalCount / pageSize) || 1;
+
+    const serializedItems: SerializedInventoryMovement[] = result.movements.map((m) => {
+      return {
+        id: m.id,
+        organizationId: m.organizationId,
+        branchId: m.branchId,
+        productId: m.productId,
+        variantId: m.variantId,
+        movementType: m.movementType as StockMovementTypeValue,
+        quantityDelta: m.quantityDelta.toString(),
+        quantityBefore: m.quantityBefore.toString(),
+        quantityAfter: m.quantityAfter.toString(),
+        referenceType: m.referenceType,
+        referenceId: m.referenceId,
+        reason: m.reason,
+        notes: m.notes,
+        performedByUserId: m.performedByUserId,
+        createdAt: m.createdAt.toISOString(),
+        product: m.product
+          ? {
+              id: m.product.id,
+              name: m.product.name,
+              sku: m.product.sku,
+            }
+          : undefined,
+        variant: m.variant
+          ? {
+              id: m.variant.id,
+              name: m.variant.name,
+              sku: m.variant.sku,
+            }
+          : null,
+        performedBy: m.performedBy
+          ? {
+              id: m.performedBy.id,
+              name: m.performedBy.name,
+              email: m.performedBy.email,
+            }
+          : null,
+      };
+    });
+
+    return {
+      success: true,
+      data: serializeData({
+        items: serializedItems,
+        totalCount: result.totalCount,
+        page,
+        pageSize,
+        totalPages,
+      }),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: translateInventoryError(
+        error,
+        "An unexpected error occurred while retrieving inventory history."
       ),
     };
   }
