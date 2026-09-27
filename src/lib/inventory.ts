@@ -409,6 +409,65 @@ export interface StockMutationResult {
 // READ SERVICES
 // ============================================================================
 
+export interface InventorySummary {
+  totalTracked: number;
+  inStockCount: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+}
+
+export interface InventoryServiceOptions {
+  organizationId?: string;
+  actorUser?: AppUserContext | null;
+}
+
+/**
+ * Returns aggregate inventory stock counts for a branch:
+ * - totalTracked: Total number of inventory stock rows in this branch.
+ * - inStockCount: Items with quantity > 0 AND (reorderLevel IS NULL OR quantity > reorderLevel).
+ * - lowStockCount: Items with quantity > 0 AND reorderLevel IS NOT NULL AND quantity <= reorderLevel.
+ * - outOfStockCount: Items with quantity <= 0.
+ *
+ * Uses a single-roundtrip PostgreSQL aggregate query with FILTER clauses.
+ */
+export async function getInventorySummary(params: {
+  organizationId?: string;
+  branchId: string;
+  actorUser?: AppUserContext | null;
+}): Promise<InventorySummary> {
+  const { organizationId, branchId } = await resolveAuthorizedInventoryContext({
+    organizationId: params.organizationId,
+    branchId: params.branchId,
+    requireMutation: false,
+    actorUser: params.actorUser,
+  });
+
+  const rows = await db.$queryRaw<
+    Array<{
+      totalTracked: number;
+      inStockCount: number;
+      lowStockCount: number;
+      outOfStockCount: number;
+    }>
+  >`
+    SELECT
+      COUNT(*)::int AS "totalTracked",
+      COUNT(*) FILTER (WHERE quantity <= 0)::int AS "outOfStockCount",
+      COUNT(*) FILTER (WHERE quantity > 0 AND "reorderLevel" IS NOT NULL AND quantity <= "reorderLevel")::int AS "lowStockCount",
+      COUNT(*) FILTER (WHERE quantity > 0 AND ("reorderLevel" IS NULL OR quantity > "reorderLevel"))::int AS "inStockCount"
+    FROM "InventoryStock"
+    WHERE "organizationId" = ${organizationId} AND "branchId" = ${branchId}
+  `;
+
+  const row = rows[0];
+  return {
+    totalTracked: row ? Number(row.totalTracked) : 0,
+    inStockCount: row ? Number(row.inStockCount) : 0,
+    lowStockCount: row ? Number(row.lowStockCount) : 0,
+    outOfStockCount: row ? Number(row.outOfStockCount) : 0,
+  };
+}
+
 export async function getBranchInventory(params: {
   organizationId?: string;
   branchId: string;

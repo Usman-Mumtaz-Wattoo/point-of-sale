@@ -138,6 +138,14 @@ export default async function DashboardPage() {
                         Returns &rarr;
                       </Link>
                     )}
+                    {["OWNER", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "ACCOUNTANT"].includes(membership.role.name) && (
+                      <Link
+                        href={`/inventory?org=${membership.organizationId}`}
+                        className="px-3 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+                      >
+                        Inventory &rarr;
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}
