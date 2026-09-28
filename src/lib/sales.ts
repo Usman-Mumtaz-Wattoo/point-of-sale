@@ -95,6 +95,15 @@ export class SaleCustomerInactiveError extends SaleValidationError {
   }
 }
 
+export class SaleHasReturnsError extends SaleError {
+  constructor(
+    message = "Cannot void a sale that has existing returns or refunds. Please manage transactions through the Returns module."
+  ) {
+    super(message);
+    this.name = "SaleHasReturnsError";
+  }
+}
+
 export {
   InsufficientStockError,
   CrossTenantViolationError,
@@ -176,6 +185,21 @@ export interface SaleCashierSummaryDTO {
   email: string;
 }
 
+export interface SaleCustomerSummaryDTO {
+  id: string;
+  name: string;
+  code: string | null;
+  phone: string | null;
+  email?: string | null;
+}
+
+export interface SaleKPISummaryDTO {
+  totalSalesCount: number;
+  totalCompletedRevenue: Prisma.Decimal;
+  totalDiscountAmount: Prisma.Decimal;
+  totalTaxAmount: Prisma.Decimal;
+}
+
 export interface SaleSummaryDTO {
   id: string;
   invoiceNumber: string;
@@ -193,6 +217,7 @@ export interface SaleSummaryDTO {
   createdAt: Date;
   branch: SaleBranchSummaryDTO;
   cashier: SaleCashierSummaryDTO | null;
+  customer: SaleCustomerSummaryDTO | null;
   itemCount: number;
 }
 
@@ -202,6 +227,7 @@ export interface PaginatedSalesResult {
   pageSize: number;
   totalItems: number;
   totalPages: number;
+  kpiSummary: SaleKPISummaryDTO;
 }
 
 export interface SaleDetailItemDTO {
@@ -218,6 +244,8 @@ export interface SaleDetailItemDTO {
   taxAmount: Prisma.Decimal;
   subtotal: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
+  quantityReturned: Prisma.Decimal;
+  amountReturned: Prisma.Decimal;
 }
 
 export interface SaleDetailPaymentDTO {
@@ -230,6 +258,16 @@ export interface SaleDetailPaymentDTO {
   notes: string | null;
   paidAt: Date;
   recordedBy: SaleCashierSummaryDTO | null;
+}
+
+export interface SaleDetailReturnSummaryDTO {
+  id: string;
+  returnNumber: string;
+  totalAmount: Prisma.Decimal;
+  refundedAmount: Prisma.Decimal;
+  reason: string | null;
+  createdAt: Date;
+  returnedBy: SaleCashierSummaryDTO | null;
 }
 
 export interface SaleDetailDTO {
@@ -254,8 +292,11 @@ export interface SaleDetailDTO {
   updatedAt: Date;
   branch: SaleBranchSummaryDTO;
   cashier: SaleCashierSummaryDTO | null;
+  customer: SaleCustomerSummaryDTO | null;
   items: SaleDetailItemDTO[];
   payments: SaleDetailPaymentDTO[];
+  returns: SaleDetailReturnSummaryDTO[];
+  hasReturns: boolean;
 }
 
 export interface VoidSaleResultDTO {
@@ -266,6 +307,7 @@ export interface VoidSaleResultDTO {
   restoredItemCount: number;
   restoredQuantity: Prisma.Decimal;
   voidedAt: Date;
+  reason?: string | null;
 }
 
 export interface SaleServiceOptions {
@@ -1059,6 +1101,9 @@ export async function getSaleById(
       cashier: {
         select: { id: true, name: true, email: true },
       },
+      customer: {
+        select: { id: true, name: true, code: true, phone: true, email: true },
+      },
       items: {
         select: {
           id: true,
@@ -1074,6 +1119,8 @@ export async function getSaleById(
           taxAmount: true,
           subtotal: true,
           lineTotal: true,
+          quantityReturned: true,
+          amountReturned: true,
         },
         orderBy: { id: "asc" },
       },
@@ -1092,6 +1139,20 @@ export async function getSaleById(
           },
         },
         orderBy: { paidAt: "asc" },
+      },
+      returns: {
+        select: {
+          id: true,
+          returnNumber: true,
+          totalAmount: true,
+          refundedAmount: true,
+          reason: true,
+          createdAt: true,
+          returnedBy: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -1113,7 +1174,10 @@ export async function getSaleById(
     );
   }
 
-  return sale as SaleDetailDTO;
+  return {
+    ...sale,
+    hasReturns: (sale.returns?.length ?? 0) > 0,
+  } as SaleDetailDTO;
 }
 
 /**
@@ -1198,6 +1262,12 @@ export async function listSales(
           pageSize: 25,
           totalItems: 0,
           totalPages: 0,
+          kpiSummary: {
+            totalSalesCount: 0,
+            totalCompletedRevenue: new Prisma.Decimal("0.00"),
+            totalDiscountAmount: new Prisma.Decimal("0.00"),
+            totalTaxAmount: new Prisma.Decimal("0.00"),
+          },
         };
       }
       branchFilterClause = { in: authorizedBranchIds };
@@ -1255,12 +1325,15 @@ export async function listSales(
     };
   }
 
-  // Search filter (case-insensitive substring match on invoiceNumber)
+  // Search filter (case-insensitive substring match on invoiceNumber, receiptNumber, or customer name/phone)
   if (input.search?.trim()) {
-    where.invoiceNumber = {
-      contains: input.search.trim(),
-      mode: "insensitive",
-    };
+    const searchVal = input.search.trim();
+    where.OR = [
+      { invoiceNumber: { contains: searchVal, mode: "insensitive" } },
+      { receiptNumber: { contains: searchVal, mode: "insensitive" } },
+      { customer: { name: { contains: searchVal, mode: "insensitive" } } },
+      { customer: { phone: { contains: searchVal, mode: "insensitive" } } },
+    ];
   }
 
   // 4. Pagination validation
@@ -1285,8 +1358,12 @@ export async function listSales(
     { id: "desc" },
   ];
 
-  // 6. Execute count and findMany concurrently
-  const [totalItems, rows] = await Promise.all([
+  const kpiWhere: Prisma.SaleWhereInput = where.status
+    ? where
+    : { ...where, status: SaleStatus.COMPLETED };
+
+  // 6. Execute count, findMany, and KPI aggregate concurrently
+  const [totalItems, rows, kpiAgg] = await Promise.all([
     db.sale.count({ where }),
     db.sale.findMany({
       where,
@@ -1311,6 +1388,9 @@ export async function listSales(
         cashier: {
           select: { id: true, name: true, email: true },
         },
+        customer: {
+          select: { id: true, name: true, code: true, phone: true },
+        },
         _count: {
           select: { items: true },
         },
@@ -1318,6 +1398,15 @@ export async function listSales(
       orderBy,
       skip,
       take,
+    }),
+    db.sale.aggregate({
+      where: kpiWhere,
+      _count: { id: true },
+      _sum: {
+        totalAmount: true,
+        discountAmount: true,
+        taxAmount: true,
+      },
     }),
   ]);
 
@@ -1341,12 +1430,19 @@ export async function listSales(
       createdAt: r.createdAt,
       branch: r.branch,
       cashier: r.cashier,
+      customer: r.customer,
       itemCount: r._count.items,
     })),
     page,
     pageSize,
     totalItems,
     totalPages,
+    kpiSummary: {
+      totalSalesCount: kpiAgg._count.id,
+      totalCompletedRevenue: kpiAgg._sum.totalAmount ?? new Prisma.Decimal("0.00"),
+      totalDiscountAmount: kpiAgg._sum.discountAmount ?? new Prisma.Decimal("0.00"),
+      totalTaxAmount: kpiAgg._sum.taxAmount ?? new Prisma.Decimal("0.00"),
+    },
   };
 }
 
@@ -1367,7 +1463,7 @@ export async function listSales(
  */
 export async function voidSale(
   saleId: string,
-  options?: SaleServiceOptions
+  options?: SaleServiceOptions & { reason?: string }
 ): Promise<VoidSaleResultDTO> {
   if (!saleId?.trim()) {
     throw new SaleValidationError("saleId is required.");
@@ -1444,17 +1540,28 @@ export async function voidSale(
         );
       }
 
-      // 3d. Fetch SaleItems
+      // 3d. Verify no sales returns or refunds have been recorded against this sale
+      const existingReturnsCount = await tx.saleReturn.count({
+        where: { saleId: lockedSale.id, organizationId },
+      });
+
+      if (existingReturnsCount > 0) {
+        throw new SaleHasReturnsError(
+          `Cannot void sale "${lockedSale.invoiceNumber}": one or more sales returns have already been recorded against this sale. Please manage transactions through the Returns module.`
+        );
+      }
+
+      // 3e. Fetch SaleItems
       const saleItems = await tx.saleItem.findMany({
         where: { saleId: lockedSale.id, organizationId },
       });
 
-      // 3e. Sort sale items deterministically by inventory key before locking
+      // 3f. Sort sale items deterministically by inventory key before locking
       const itemKey = (item: { productId: string; variantId: string | null }) =>
         `${item.productId}:${item.variantId ?? "null"}`;
       const sortedItems = [...saleItems].sort((a, b) => itemKey(a).localeCompare(itemKey(b)));
 
-      // 3f. Restore inventory via compensating ADJUSTMENT_IN movements
+      // 3g. Restore inventory via compensating ADJUSTMENT_IN movements
       let restoredQuantity = new Prisma.Decimal("0.000");
 
       for (const item of sortedItems) {
@@ -1467,17 +1574,32 @@ export async function voidSale(
           movementType: "ADJUSTMENT_IN",
           referenceType: "SALE_VOID",
           referenceId: item.id,
-          reason: `Void Sale ${lockedSale.invoiceNumber}`,
+          reason: options?.reason?.trim()
+            ? `Void Sale ${lockedSale.invoiceNumber}: ${options.reason.trim()}`
+            : `Void Sale ${lockedSale.invoiceNumber}`,
           performedByUserId: user.id,
         });
 
         restoredQuantity = restoredQuantity.add(item.quantity);
       }
 
-      // 3g. Update Sale status to VOIDED
+      // 3h. Update Sale status to VOIDED (preserving historical records, optionally annotating notes)
+      const existingSaleRecord = await tx.sale.findUnique({
+        where: { id: lockedSale.id },
+        select: { notes: true },
+      });
+      const cleanReason = options?.reason?.trim() || null;
+      const voidNote = cleanReason ? `[VOIDED: ${cleanReason}]` : "[VOIDED]";
+      const updatedNotes = existingSaleRecord?.notes
+        ? `${existingSaleRecord.notes}\n${voidNote}`
+        : voidNote;
+
       const updatedSale = await tx.sale.update({
         where: { id: lockedSale.id },
-        data: { status: SaleStatus.VOIDED },
+        data: {
+          status: SaleStatus.VOIDED,
+          notes: updatedNotes,
+        },
         select: { id: true, invoiceNumber: true, status: true, updatedAt: true },
       });
 
@@ -1489,9 +1611,14 @@ export async function voidSale(
         restoredItemCount: saleItems.length,
         restoredQuantity,
         voidedAt: updatedSale.updatedAt,
+        reason: cleanReason,
       };
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      timeout: 25000,
+      maxWait: 10000,
+    }
   );
 }
 
