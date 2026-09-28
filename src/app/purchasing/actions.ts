@@ -43,7 +43,16 @@ import {
   PurchasePaymentOverpaymentError,
   PurchasePaymentStateError,
 } from "@/lib/purchase-payments";
-import { listPurchaseReturnsForPurchase } from "@/lib/purchase-returns";
+import {
+  listPurchaseReturnsForPurchase,
+  createPurchaseReturn,
+  PURCHASE_RETURN_MUTATION_ROLES,
+  PurchaseReturnValidationError,
+  PurchaseReturnNotFoundError,
+  PurchaseReturnStateError,
+  PurchaseReturnOverReturnError,
+} from "@/lib/purchase-returns";
+import { InsufficientStockError, InventoryBranchAccessError } from "@/lib/inventory";
 import {
   checkBranchAccess,
   CrossTenantViolationError,
@@ -70,6 +79,8 @@ import {
   type ReceivePurchaseOrderActionResult,
   type RecordPurchasePaymentInputDTO,
   type RecordPurchasePaymentActionResult,
+  type CreatePurchaseReturnInputDTO,
+  type CreatePurchaseReturnActionResult,
 } from "./types";
 
 // ============================================================================
@@ -105,6 +116,7 @@ async function verifyPurchasingContext(params: {
   requireSupplierMutation?: boolean;
   requirePurchaseMutation?: boolean;
   requirePaymentMutation?: boolean;
+  requireReturnMutation?: boolean;
   actorUser?: AppUserContext | null;
 }): Promise<VerifiedPurchasingContext> {
   const user = params.actorUser !== undefined ? params.actorUser : await getCurrentAppUser();
@@ -131,6 +143,12 @@ async function verifyPurchasingContext(params: {
     if (!SUPPLIER_MUTATION_ROLES.includes(role)) {
       throw new UnauthorizedRoleError(
         `Role "${role}" is not permitted to modify suppliers. Required one of: ${SUPPLIER_MUTATION_ROLES.join(", ")}.`
+      );
+    }
+  } else if (params.requireReturnMutation) {
+    if (!PURCHASE_RETURN_MUTATION_ROLES.includes(role)) {
+      throw new UnauthorizedRoleError(
+        `Role "${role}" is not permitted to create purchase returns. Required one of: ${PURCHASE_RETURN_MUTATION_ROLES.join(", ")}.`
       );
     }
   } else if (params.requirePaymentMutation) {
@@ -185,6 +203,20 @@ function translatePurchasingError(error: unknown, fallbackMessage: string): stri
     error instanceof PurchasePaymentOverpaymentError ||
     error instanceof PurchasePaymentStateError
   ) {
+    return error.message;
+  }
+  if (
+    error instanceof PurchaseReturnValidationError ||
+    error instanceof PurchaseReturnNotFoundError ||
+    error instanceof PurchaseReturnStateError ||
+    error instanceof PurchaseReturnOverReturnError
+  ) {
+    return error.message;
+  }
+  if (error instanceof InsufficientStockError) {
+    return `Insufficient inventory: The branch does not currently have enough stock on hand to return this quantity (${error.message}).`;
+  }
+  if (error instanceof InventoryBranchAccessError) {
     return error.message;
   }
   if (
@@ -1112,6 +1144,110 @@ export async function recordPurchasePaymentAction(
       };
     }
     const errorMsg = translatePurchasingError(error, "Failed to record supplier payment.");
+    return {
+      success: false,
+      error: errorMsg,
+    };
+  }
+}
+
+// ============================================================================
+// STEP 17E: PURCHASE RETURN ACTIONS
+// ============================================================================
+
+export async function createPurchaseReturnAction(
+  input: CreatePurchaseReturnInputDTO,
+  options?: { organizationId?: string; actorUser?: AppUserContext }
+): Promise<CreatePurchaseReturnActionResult> {
+  try {
+    const { user, organizationId } = await verifyPurchasingContext({
+      requestedOrgId: options?.organizationId,
+      requireReturnMutation: true,
+      actorUser: options?.actorUser,
+    });
+
+    if (!input || !input.purchaseId || typeof input.purchaseId !== "string" || !input.purchaseId.trim()) {
+      return { success: false, error: "Purchase ID is required." };
+    }
+
+    if (!input.items || !Array.isArray(input.items) || input.items.length === 0) {
+      return { success: false, error: "At least one item must be returned." };
+    }
+
+    // Verify existing purchase exists in organization and actor has branch access
+    const existingPurchase = await db.purchase.findFirst({
+      where: {
+        id: input.purchaseId.trim(),
+        organizationId,
+      },
+      select: {
+        id: true,
+        branchId: true,
+        status: true,
+        purchaseNumber: true,
+      },
+    });
+
+    if (!existingPurchase) {
+      return { success: false, error: "Purchase order not found." };
+    }
+
+    const hasBranchAccess = await checkBranchAccess({
+      userId: user.id,
+      organizationId,
+      branchId: existingPurchase.branchId,
+    });
+    if (!hasBranchAccess) {
+      return {
+        success: false,
+        error: `You do not have authorized access to branch "${existingPurchase.branchId}".`,
+      };
+    }
+
+    const purchaseReturn = await createPurchaseReturn(
+      {
+        purchaseId: input.purchaseId.trim(),
+        items: input.items.map((item) => ({
+          purchaseItemId: item.purchaseItemId.trim(),
+          quantityReturned: item.quantityReturned.trim(),
+          reason: item.reason?.trim() || null,
+        })),
+        returnDate: input.returnDate ? new Date(input.returnDate) : null,
+        reason: input.reason?.trim() || null,
+        notes: input.notes?.trim() || null,
+      },
+      {
+        organizationId,
+        actorUser: user,
+      }
+    );
+
+    return {
+      success: true,
+      message: `Purchase return "${purchaseReturn.returnNumber}" recorded successfully.`,
+      returnId: purchaseReturn.id,
+      returnNumber: purchaseReturn.returnNumber,
+    };
+  } catch (error) {
+    if (error instanceof PurchaseReturnOverReturnError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof InsufficientStockError) {
+      return {
+        success: false,
+        error: `Insufficient inventory: The branch does not currently have enough stock on hand to return this quantity (${error.message}).`,
+      };
+    }
+    if (error instanceof PurchaseReturnStateError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    const errorMsg = translatePurchasingError(error, "Failed to record purchase return.");
     return {
       success: false,
       error: errorMsg,

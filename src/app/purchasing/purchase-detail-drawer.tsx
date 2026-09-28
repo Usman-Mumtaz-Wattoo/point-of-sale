@@ -13,6 +13,7 @@ import {
 } from "./actions";
 import { ReceivingModal } from "./receiving-modal";
 import { PaymentModal } from "./payment-modal";
+import { PurchaseReturnModal } from "./purchase-return-modal";
 import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
 
 interface PurchaseDetailDrawerProps {
@@ -53,6 +54,7 @@ function PurchaseDetailDrawerContent({
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [isReceivingModalOpen, setIsReceivingModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isActionPending, startActionTransition] = useTransition();
   const [, startLoadTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -61,12 +63,29 @@ function PurchaseDetailDrawerContent({
     ? userRole === SYSTEM_ROLES.OWNER || userRole === SYSTEM_ROLES.MANAGER || userRole === SYSTEM_ROLES.ACCOUNTANT
     : canMutatePurchases;
 
+  const canRecordReturns = userRole
+    ? userRole === SYSTEM_ROLES.OWNER || userRole === SYSTEM_ROLES.MANAGER || userRole === SYSTEM_ROLES.INVENTORY_MANAGER
+    : canMutatePurchases;
+
   const isPayableStatus =
     purchase &&
     (purchase.status === PurchaseStatus.ORDERED ||
       purchase.status === PurchaseStatus.PARTIALLY_RECEIVED ||
       purchase.status === PurchaseStatus.RECEIVED);
   const hasOutstandingBalance = purchase ? parseFloat(purchase.balanceDue) > 0.0001 : false;
+
+  const isReturnableStatus =
+    purchase &&
+    (purchase.status === PurchaseStatus.PARTIALLY_RECEIVED ||
+      purchase.status === PurchaseStatus.RECEIVED);
+
+  const hasReturnableItems = purchase
+    ? purchase.items.some((item) => {
+        const rec = parseFloat(item.quantityReceived) || 0;
+        const ret = parseFloat(item.quantityReturned) || 0;
+        return rec > ret + 0.0001;
+      })
+    : false;
 
   // Fetch detail data
   const loadDetail = useCallback(() => {
@@ -107,6 +126,7 @@ function PurchaseDetailDrawerContent({
         !confirmCancelOpen &&
         !isReceivingModalOpen &&
         !isPaymentModalOpen &&
+        !isReturnModalOpen &&
         !isActionPending
       ) {
         onClose();
@@ -114,7 +134,7 @@ function PurchaseDetailDrawerContent({
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [confirmOrderOpen, confirmCancelOpen, isReceivingModalOpen, isPaymentModalOpen, isActionPending, onClose]);
+  }, [confirmOrderOpen, confirmCancelOpen, isReceivingModalOpen, isPaymentModalOpen, isReturnModalOpen, isActionPending, onClose]);
 
   // Action: Mark as Ordered
   function handleMarkOrdered() {
@@ -380,6 +400,16 @@ function PurchaseDetailDrawerContent({
                         <span>Receive Goods</span>
                       </button>
                     )}
+                    {purchase.status === PurchaseStatus.PARTIALLY_RECEIVED && hasReturnableItems && canRecordReturns && (
+                      <button
+                        type="button"
+                        onClick={() => setIsReturnModalOpen(true)}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-900/20 transition-all flex items-center gap-1.5"
+                      >
+                        <span>↩️</span>
+                        <span>Return Goods</span>
+                      </button>
+                    )}
                     {isPayableStatus && hasOutstandingBalance && canRecordPayments && (
                       <button
                         type="button"
@@ -390,7 +420,7 @@ function PurchaseDetailDrawerContent({
                         <span>Record Payment</span>
                       </button>
                     )}
-                    {!canMutatePurchases && !canRecordPayments && (
+                    {!canMutatePurchases && !canRecordPayments && !canRecordReturns && (
                       <span className="text-xs text-slate-500 italic">Read-only permissions</span>
                     )}
                   </div>
@@ -412,16 +442,28 @@ function PurchaseDetailDrawerContent({
                     <span>✅</span>
                     <span>All ordered items have been fully received into stock.</span>
                   </div>
-                  {hasOutstandingBalance && canRecordPayments && (
-                    <button
-                      type="button"
-                      onClick={() => setIsPaymentModalOpen(true)}
-                      className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 shadow-md shadow-sky-900/20 transition-all flex items-center gap-1.5"
-                    >
-                      <span>💳</span>
-                      <span>Record Payment</span>
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {hasReturnableItems && canRecordReturns && (
+                      <button
+                        type="button"
+                        onClick={() => setIsReturnModalOpen(true)}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-900/20 transition-all flex items-center gap-1.5"
+                      >
+                        <span>↩️</span>
+                        <span>Return Goods</span>
+                      </button>
+                    )}
+                    {hasOutstandingBalance && canRecordPayments && (
+                      <button
+                        type="button"
+                        onClick={() => setIsPaymentModalOpen(true)}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 shadow-md shadow-sky-900/20 transition-all flex items-center gap-1.5"
+                      >
+                        <span>💳</span>
+                        <span>Record Payment</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -861,12 +903,24 @@ function PurchaseDetailDrawerContent({
                 {activeTab === "returns" && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Purchase Returns History (Read-Only)
-                      </h4>
-                      <span className="text-xs text-slate-500">
-                        {purchase.returns.length} return(s) processed
-                      </span>
+                      <div>
+                        <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                          Purchase Returns History
+                        </h4>
+                        <span className="text-xs text-slate-500">
+                          {purchase.returns.length} return(s) processed
+                        </span>
+                      </div>
+                      {isReturnableStatus && hasReturnableItems && canRecordReturns && (
+                        <button
+                          type="button"
+                          onClick={() => setIsReturnModalOpen(true)}
+                          className="px-3 py-1 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 transition-all flex items-center gap-1.5 shadow-sm"
+                        >
+                          <span>↩️</span>
+                          <span>Record Return</span>
+                        </button>
+                      )}
                     </div>
 
                     {purchase.returns.length === 0 ? (
@@ -1029,6 +1083,21 @@ function PurchaseDetailDrawerContent({
           onClose={() => setIsPaymentModalOpen(false)}
           onSuccess={(msg) => {
             setIsPaymentModalOpen(false);
+            onPurchaseUpdated(msg);
+            loadDetail();
+          }}
+          purchase={purchase}
+          organizationId={organizationId}
+        />
+      )}
+
+      {/* Purchase Return Modal */}
+      {isReturnModalOpen && purchase && (
+        <PurchaseReturnModal
+          isOpen={isReturnModalOpen}
+          onClose={() => setIsReturnModalOpen(false)}
+          onSuccess={(msg) => {
+            setIsReturnModalOpen(false);
             onPurchaseUpdated(msg);
             loadDetail();
           }}

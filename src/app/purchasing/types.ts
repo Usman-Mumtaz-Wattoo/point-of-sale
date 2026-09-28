@@ -380,3 +380,29 @@ export interface RecordPurchasePaymentActionResult {
   paymentId?: string;
   purchasePaymentStatus?: PurchasePaymentStatus;
 }
+
+// ============================================================================
+// STEP 17E: PURCHASE RETURN DTOs
+// ============================================================================
+
+export interface CreatePurchaseReturnItemInputDTO {
+  purchaseItemId: string;
+  quantityReturned: string;
+  reason?: string | null;
+}
+
+export interface CreatePurchaseReturnInputDTO {
+  purchaseId: string;
+  items: CreatePurchaseReturnItemInputDTO[];
+  returnDate?: string | null;
+  reason?: string | null;
+  notes?: string | null;
+}
+
+export interface CreatePurchaseReturnActionResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  returnId?: string;
+  returnNumber?: string;
+}

@@ -399,6 +399,7 @@ export async function createPurchaseReturn(
       userId: user.id,
       organizationId,
       branchId: lockedPurchase.branchId,
+      tx,
     });
     if (!hasBranchAccess) {
       throw new InventoryBranchAccessError(
@@ -634,7 +635,7 @@ export async function createPurchaseReturn(
         },
       },
     });
-  });
+  }, { timeout: 25000, maxWait: 10000 });
 }
 
 // ============================================================================
