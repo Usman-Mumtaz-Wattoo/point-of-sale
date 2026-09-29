@@ -136,6 +136,22 @@ export function SettingsView({ initialData, userEmail, userName }: SettingsViewP
             </span>
           </div>
         </div>
+
+        {/* Sub-Navigation Tabs */}
+        <div className="max-w-6xl mx-auto mt-3 flex items-center gap-2 border-t border-slate-800/80 pt-2.5">
+          <Link
+            href="/settings"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 transition-colors"
+          >
+            🏢 Organization Profile
+          </Link>
+          <Link
+            href="/settings/branches"
+            className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
+          >
+            🏪 Branch Administration
+          </Link>
+        </div>
       </header>
 
       {/* Main Content Area */}
