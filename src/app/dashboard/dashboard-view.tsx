@@ -401,6 +401,14 @@ export function DashboardView({
             >
               Catalog
             </Link>
+            {data.userRole === "OWNER" && (
+              <Link
+                href={`/settings?org=${data.organizationId}`}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+              >
+                Settings
+              </Link>
+            )}
             <form action={signOutAction}>
               <button
                 type="submit"
