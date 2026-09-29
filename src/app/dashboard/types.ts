@@ -4,13 +4,23 @@
  * and client components avoid direct Prisma runtime imports.
  */
 
-import { type SystemRoleName } from "@/lib/roles";
+import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
+
+export const DASHBOARD_ALLOWED_ROLES: readonly SystemRoleName[] = [
+  SYSTEM_ROLES.OWNER,
+  SYSTEM_ROLES.MANAGER,
+  SYSTEM_ROLES.CASHIER,
+  SYSTEM_ROLES.ACCOUNTANT,
+  SYSTEM_ROLES.INVENTORY_MANAGER,
+];
 
 export type DashboardDatePreset =
   | "today"
   | "yesterday"
   | "last7days"
+  | "last30days"
   | "thisMonth"
+  | "lastMonth"
   | "all"
   | "custom";
 
@@ -63,6 +73,7 @@ export interface DashboardMetricsDTO {
   timezone: string;
   dateRange: DashboardDateRange;
   selectedBranch: SelectedBranchInfo | null; // null represents all authorized branches
+  accessibleBranches: SelectedBranchInfo[]; // Authorized branches for branch selector
   userRole: SystemRoleName;
   salesMetrics: DashboardSalesMetrics | null; // null for INVENTORY_MANAGER
   returnsMetrics: DashboardReturnsMetrics | null; // null for INVENTORY_MANAGER

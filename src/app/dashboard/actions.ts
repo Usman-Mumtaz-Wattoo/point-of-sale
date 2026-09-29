@@ -12,31 +12,15 @@ import {
   BranchNotFoundError,
 } from "@/lib/memberships";
 import type { AppUserContext } from "@/lib/sales";
-import type {
-  GetDashboardMetricsInput,
-  DashboardMetricsDTO,
-  DashboardActionResult,
-  DashboardDatePreset,
-  DashboardBranchSummary,
-  SelectedBranchInfo,
+import {
+  type GetDashboardMetricsInput,
+  type DashboardMetricsDTO,
+  type DashboardActionResult,
+  type DashboardDatePreset,
+  type DashboardBranchSummary,
+  type SelectedBranchInfo,
+  DASHBOARD_ALLOWED_ROLES,
 } from "./types";
-
-export type {
-  GetDashboardMetricsInput,
-  DashboardMetricsDTO,
-  DashboardActionResult,
-  DashboardDatePreset,
-  DashboardBranchSummary,
-  SelectedBranchInfo,
-};
-
-export const DASHBOARD_ALLOWED_ROLES: readonly SystemRoleName[] = [
-  SYSTEM_ROLES.OWNER,
-  SYSTEM_ROLES.MANAGER,
-  SYSTEM_ROLES.CASHIER,
-  SYSTEM_ROLES.ACCOUNTANT,
-  SYSTEM_ROLES.INVENTORY_MANAGER,
-];
 
 export interface DashboardServiceOptions {
   actorUser?: AppUserContext | null;
@@ -243,10 +227,37 @@ function computeDateBounds(
     return { startDate: start, endDate: end, resolvedPreset: "last7days" };
   }
 
+  if (preset === "last30days") {
+    const sDate = new Date(Date.UTC(currYear, currMonth - 1, currDay - 29));
+    const start = getUtcDateForTimezone(
+      sDate.getUTCFullYear(),
+      sDate.getUTCMonth() + 1,
+      sDate.getUTCDate(),
+      0,
+      0,
+      0,
+      0,
+      timeZone
+    );
+    const end = getUtcDateForTimezone(currYear, currMonth, currDay, 23, 59, 59, 999, timeZone);
+    return { startDate: start, endDate: end, resolvedPreset: "last30days" };
+  }
+
   if (preset === "thisMonth") {
     const start = getUtcDateForTimezone(currYear, currMonth, 1, 0, 0, 0, 0, timeZone);
     const end = getUtcDateForTimezone(currYear, currMonth, currDay, 23, 59, 59, 999, timeZone);
     return { startDate: start, endDate: end, resolvedPreset: "thisMonth" };
+  }
+
+  if (preset === "lastMonth") {
+    const prevMonthDate = new Date(Date.UTC(currYear, currMonth - 2, 1));
+    const pYear = prevMonthDate.getUTCFullYear();
+    const pMonth = prevMonthDate.getUTCMonth() + 1;
+    const lastDayDate = new Date(Date.UTC(currYear, currMonth - 1, 0));
+    const pLastDay = lastDayDate.getUTCDate();
+    const start = getUtcDateForTimezone(pYear, pMonth, 1, 0, 0, 0, 0, timeZone);
+    const end = getUtcDateForTimezone(pYear, pMonth, pLastDay, 23, 59, 59, 999, timeZone);
+    return { startDate: start, endDate: end, resolvedPreset: "lastMonth" };
   }
 
   // Default: "today"
@@ -287,7 +298,56 @@ export async function getDashboardMetricsAction(
       membership,
     } = await verifyDashboardContext(requestedOrgId, options);
 
-    // 1. Resolve branch scoping & validate branch permissions
+    // 1. Resolve accessible branches for the caller (client branch options)
+    let accessibleBranches: SelectedBranchInfo[] = [];
+    if (role === SYSTEM_ROLES.OWNER || role === SYSTEM_ROLES.ACCOUNTANT) {
+      accessibleBranches = await db.branch.findMany({
+        where: { organizationId, isActive: true },
+        select: { id: true, name: true, code: true },
+        orderBy: { name: "asc" },
+      });
+    } else {
+      const authorizedBranchIds = membership.branchMemberships
+        .filter((bm) => bm.branch.isActive)
+        .map((bm) => bm.branchId);
+
+      if (authorizedBranchIds.length > 0) {
+        accessibleBranches = await db.branch.findMany({
+          where: {
+            organizationId,
+            id: { in: authorizedBranchIds },
+            isActive: true,
+          },
+          select: { id: true, name: true, code: true },
+          orderBy: { name: "asc" },
+        });
+      }
+    }
+
+    // 2. Validate custom date range input if requested
+    if (input?.datePreset === "custom") {
+      if (!input.startDate?.trim() || !input.endDate?.trim()) {
+        return {
+          success: false,
+          error: "Please provide both start and end dates for a custom range.",
+        };
+      }
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(input.startDate.trim()) || !dateRegex.test(input.endDate.trim())) {
+        return {
+          success: false,
+          error: "Custom dates must be in YYYY-MM-DD format.",
+        };
+      }
+      if (input.startDate.trim() > input.endDate.trim()) {
+        return {
+          success: false,
+          error: "Start date cannot be after end date.",
+        };
+      }
+    }
+
+    // 3. Resolve branch scoping & validate branch permissions
     let branchFilterClause: string | { in: string[] } | undefined = undefined;
     let selectedBranchInfo: SelectedBranchInfo | null = null;
 
@@ -356,6 +416,7 @@ export async function getDashboardMetricsAction(
                 preset: input?.datePreset || "today",
               },
               selectedBranch: null,
+              accessibleBranches: [],
               userRole: role,
               salesMetrics: role === SYSTEM_ROLES.INVENTORY_MANAGER ? null : {
                 grossRevenue: "0.00",
@@ -644,6 +705,7 @@ export async function getDashboardMetricsAction(
         preset: resolvedPreset,
       },
       selectedBranch: selectedBranchInfo,
+      accessibleBranches,
       userRole: role,
       salesMetrics: salesMetricsDTO,
       returnsMetrics: returnsMetricsDTO,
