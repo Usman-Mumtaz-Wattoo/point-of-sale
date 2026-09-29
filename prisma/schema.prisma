@@ -51,6 +51,7 @@ model Organization {
   saleReturnItems      SaleReturnItem[]
   saleRefunds          SaleRefund[]
   suppliers            Supplier[]
+  invitations          OrganizationInvitation[]
 
   @@index([name])
   @@index([isActive])
@@ -78,6 +79,7 @@ model Branch {
   sales              Sale[]
   saleReturns        SaleReturn[]
   primaryCustomers   Customer[]          @relation("BranchPrimaryCustomers")
+  invitationBranches InvitationBranch[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -129,6 +131,7 @@ model User {
   recordedSalePayments     SalePayment[]            @relation("RecordedSalePayments")
   returnedSaleReturns      SaleReturn[]             @relation("ReturnedSaleReturns")
   processedSaleRefunds     SaleRefund[]             @relation("ProcessedSaleRefunds")
+  sentInvitations          OrganizationInvitation[] @relation("SentInvitations")
 
   @@index([email])
   @@index([isActive])
@@ -141,6 +144,7 @@ model Role {
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
   memberships OrganizationMembership[]
+  invitations OrganizationInvitation[]
 }
 
 model OrganizationMembership {
@@ -174,6 +178,41 @@ model BranchMembership {
 
   @@unique([organizationMembershipId, branchId])
   @@index([organizationMembershipId])
+  @@index([branchId])
+}
+
+model OrganizationInvitation {
+  id             String             @id @default(cuid())
+  organizationId String
+  email          String
+  roleId         String
+  tokenHash      String             @unique
+  status         InvitationStatus   @default(PENDING)
+  expiresAt      DateTime
+  invitedById    String?
+  acceptedAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           Role               @relation(fields: [roleId], references: [id])
+  invitedBy      User?              @relation("SentInvitations", fields: [invitedById], references: [id], onDelete: SetNull)
+  branches       InvitationBranch[]
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([tokenHash])
+  @@index([organizationId, status])
+}
+
+model InvitationBranch {
+  id           String                 @id @default(cuid())
+  invitationId String
+  branchId     String
+  invitation   OrganizationInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  branch       Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([invitationId, branchId])
+  @@index([invitationId])
   @@index([branchId])
 }
 
@@ -796,4 +835,11 @@ enum SalePaymentMethod {
   BANK_TRANSFER
   DIGITAL_WALLET
   OTHER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  CANCELLED
+  EXPIRED
 }

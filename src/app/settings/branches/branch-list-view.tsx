@@ -203,6 +203,12 @@ export function BranchListView({
           >
             🏪 Branch Administration
           </Link>
+          <Link
+            href={`/settings/staff?org=${organizationId}`}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
+          >
+            👥 Staff & Permissions
+          </Link>
         </div>
       </header>
 
