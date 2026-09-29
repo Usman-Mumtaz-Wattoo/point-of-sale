@@ -130,6 +130,14 @@ export default async function DashboardPage() {
                         POS &rarr;
                       </Link>
                     )}
+                    {["OWNER", "MANAGER", "CASHIER", "ACCOUNTANT"].includes(membership.role.name) && (
+                      <Link
+                        href={`/sales?org=${membership.organizationId}`}
+                        className="px-3 py-1 rounded text-xs font-medium bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 transition-colors font-semibold"
+                      >
+                        Sales &rarr;
+                      </Link>
+                    )}
                     {membership.role.name !== "INVENTORY_MANAGER" && (
                       <Link
                         href={`/sales/returns?org=${membership.organizationId}`}
