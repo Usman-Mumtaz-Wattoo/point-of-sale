@@ -19,6 +19,9 @@ import {
   type DashboardDatePreset,
   type DashboardBranchSummary,
   type SelectedBranchInfo,
+  type DashboardStockAlertItem,
+  type DashboardTopProductItem,
+  type DashboardActivityItem,
   DASHBOARD_ALLOWED_ROLES,
 } from "./types";
 
@@ -438,6 +441,16 @@ export async function getDashboardMetricsAction(
                 totalTrackedItems: 0,
               },
               branchSummaries: [],
+              stockAlerts: {
+                outOfStockItems: [],
+                lowStockItems: [],
+                totalOutOfStockCount: 0,
+                totalLowStockCount: 0,
+                hasMoreOutOfStock: false,
+                hasMoreLowStock: false,
+              },
+              topSellingProducts: role === SYSTEM_ROLES.INVENTORY_MANAGER ? null : [],
+              recentActivity: [],
             },
           };
         }
@@ -501,8 +514,11 @@ export async function getDashboardMetricsAction(
       salesAgg,
       returnsAgg,
       outOfStockCount,
+      outOfStockCandidates,
       lowStockCandidates,
       totalTrackedItems,
+      topSaleItems,
+      recentActivityRaw,
     ] = await Promise.all([
       // Query 1: Sales Aggregate (excluded for INVENTORY_MANAGER)
       isInventoryManager
@@ -538,32 +554,196 @@ export async function getDashboardMetricsAction(
         },
       }),
 
-      // Query 4: Low Stock Candidates (reorderLevel set and quantity > 0)
+      // Query 4: Out of Stock item details (quantity <= 0)
+      db.inventoryStock.findMany({
+        where: {
+          ...stockWhere,
+          quantity: { lte: 0 },
+          branch: { isActive: true },
+        },
+        select: {
+          id: true,
+          quantity: true,
+          reorderLevel: true,
+          branchId: true,
+          product: { select: { name: true, sku: true, unit: true, isActive: true } },
+          variant: { select: { name: true, sku: true, isActive: true } },
+          branch: { select: { id: true, name: true, code: true, isActive: true } },
+        },
+        orderBy: { quantity: "asc" },
+        take: 20,
+      }),
+
+      // Query 5: Low Stock Candidates (reorderLevel set and quantity > 0)
       db.inventoryStock.findMany({
         where: {
           ...stockWhere,
           reorderLevel: { not: null },
           quantity: { gt: 0 },
+          branch: { isActive: true },
         },
         select: {
+          id: true,
           quantity: true,
           reorderLevel: true,
+          branchId: true,
+          product: { select: { name: true, sku: true, unit: true, isActive: true } },
+          variant: { select: { name: true, sku: true, isActive: true } },
+          branch: { select: { id: true, name: true, code: true, isActive: true } },
         },
+        orderBy: { quantity: "asc" },
+        take: 100,
       }),
 
-      // Query 5: Total active tracked inventory items
+      // Query 6: Total active tracked inventory items
       db.inventoryStock.count({
         where: stockWhere,
       }),
+
+      // Query 7: Top Selling Products (excluded for INVENTORY_MANAGER)
+      isInventoryManager
+        ? Promise.resolve([])
+        : db.saleItem.findMany({
+            where: {
+              organizationId,
+              sale: {
+                status: SaleStatus.COMPLETED,
+                ...(branchFilterClause !== undefined ? { branchId: branchFilterClause } : {}),
+                ...(dateFilterClause !== undefined ? { saleDate: dateFilterClause } : {}),
+              },
+            },
+            select: {
+              productId: true,
+              variantId: true,
+              productName: true,
+              productSku: true,
+              quantity: true,
+              quantityReturned: true,
+              lineTotal: true,
+              product: { select: { name: true, sku: true } },
+              variant: { select: { name: true, sku: true } },
+            },
+            take: 1000,
+          }),
+
+      // Query 8: Recent Activity
+      isInventoryManager
+        ? db.inventoryMovement.findMany({
+            where: {
+              organizationId,
+              ...(branchFilterClause !== undefined ? { branchId: branchFilterClause } : {}),
+            },
+            select: {
+              id: true,
+              movementType: true,
+              quantityDelta: true,
+              createdAt: true,
+              reason: true,
+              product: { select: { name: true } },
+              branch: { select: { name: true, code: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          })
+        : Promise.all([
+            db.sale.findMany({
+              where: {
+                organizationId,
+                status: SaleStatus.COMPLETED,
+                ...(branchFilterClause !== undefined ? { branchId: branchFilterClause } : {}),
+              },
+              select: {
+                id: true,
+                invoiceNumber: true,
+                totalAmount: true,
+                saleDate: true,
+                branch: { select: { name: true, code: true } },
+                _count: { select: { items: true } },
+              },
+              orderBy: { saleDate: "desc" },
+              take: 8,
+            }),
+            db.saleReturn.findMany({
+              where: {
+                organizationId,
+                ...(branchFilterClause !== undefined ? { branchId: branchFilterClause } : {}),
+              },
+              select: {
+                id: true,
+                returnNumber: true,
+                refundedAmount: true,
+                returnDate: true,
+                branch: { select: { name: true, code: true } },
+                _count: { select: { items: true } },
+              },
+              orderBy: { returnDate: "desc" },
+              take: 5,
+            }),
+            db.inventoryMovement.findMany({
+              where: {
+                organizationId,
+                ...(branchFilterClause !== undefined ? { branchId: branchFilterClause } : {}),
+              },
+              select: {
+                id: true,
+                movementType: true,
+                quantityDelta: true,
+                createdAt: true,
+                reason: true,
+                product: { select: { name: true } },
+                branch: { select: { name: true, code: true } },
+              },
+              orderBy: { createdAt: "desc" },
+              take: 5,
+            }),
+          ]),
     ]);
 
-    // 6. Calculate inventory alert counts
-    let lowStockCount = 0;
-    for (const item of lowStockCandidates) {
-      if (item.reorderLevel !== null && item.quantity.lessThanOrEqualTo(item.reorderLevel)) {
-        lowStockCount++;
-      }
-    }
+    // 6. Calculate inventory alert counts and item lists
+    const lowStockFiltered = lowStockCandidates.filter(
+      (item) =>
+        item.branch.isActive &&
+        item.product.isActive &&
+        (!item.variant || item.variant.isActive) &&
+        item.reorderLevel !== null &&
+        item.quantity.lessThanOrEqualTo(item.reorderLevel)
+    );
+    const lowStockCount = lowStockFiltered.length;
+
+    const lowStockAlertItems: DashboardStockAlertItem[] = lowStockFiltered.slice(0, 10).map((item) => ({
+      id: item.id,
+      productName: item.product.name,
+      variantName: item.variant?.name || null,
+      sku: item.variant?.sku || item.product.sku || null,
+      quantity: item.quantity.toFixed(item.product.unit === "piece" ? 0 : 2),
+      reorderLevel: item.reorderLevel ? item.reorderLevel.toFixed(item.product.unit === "piece" ? 0 : 2) : null,
+      unit: item.product.unit,
+      branchId: item.branch.id,
+      branchName: item.branch.name,
+      branchCode: item.branch.code,
+      status: "LOW_STOCK" as const,
+    }));
+
+    const outOfStockFiltered = outOfStockCandidates.filter(
+      (item) =>
+        item.branch.isActive &&
+        item.product.isActive &&
+        (!item.variant || item.variant.isActive)
+    );
+
+    const outOfStockAlertItems: DashboardStockAlertItem[] = outOfStockFiltered.slice(0, 10).map((item) => ({
+      id: item.id,
+      productName: item.product.name,
+      variantName: item.variant?.name || null,
+      sku: item.variant?.sku || item.product.sku || null,
+      quantity: item.quantity.toFixed(item.product.unit === "piece" ? 0 : 2),
+      reorderLevel: item.reorderLevel ? item.reorderLevel.toFixed(item.product.unit === "piece" ? 0 : 2) : null,
+      unit: item.product.unit,
+      branchId: item.branch.id,
+      branchName: item.branch.name,
+      branchCode: item.branch.code,
+      status: "OUT_OF_STOCK" as const,
+    }));
 
     // 7. Calculate sales & financial figures using Decimal arithmetic
     let salesMetricsDTO = null;
@@ -606,7 +786,152 @@ export async function getDashboardMetricsAction(
       netSalesRevenueStr = grossRevenue.minus(totalRefunded).toFixed(2);
     }
 
-    // 8. Branch summaries for multi-branch view (OWNER, ACCOUNTANT, or multi-branch MANAGER)
+    // 8. Top Selling Products calculation
+    let topSellingProducts: DashboardTopProductItem[] | null = null;
+    if (!isInventoryManager && Array.isArray(topSaleItems)) {
+      const productMap = new Map<
+        string,
+        {
+          productId: string;
+          variantId: string | null;
+          productName: string;
+          variantName: string | null;
+          sku: string | null;
+          unitsSold: Prisma.Decimal;
+          unitsReturned: Prisma.Decimal;
+          grossRevenue: Prisma.Decimal;
+        }
+      >();
+
+      for (const item of topSaleItems) {
+        const key = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
+        const existing = productMap.get(key);
+        if (existing) {
+          existing.unitsSold = existing.unitsSold.plus(item.quantity);
+          existing.unitsReturned = existing.unitsReturned.plus(item.quantityReturned);
+          existing.grossRevenue = existing.grossRevenue.plus(item.lineTotal);
+        } else {
+          productMap.set(key, {
+            productId: item.productId,
+            variantId: item.variantId,
+            productName: item.variant?.name ? `${item.product.name} (${item.variant.name})` : item.product.name,
+            variantName: item.variant?.name || null,
+            sku: item.variant?.sku || item.productSku || item.product.sku || null,
+            unitsSold: item.quantity,
+            unitsReturned: item.quantityReturned,
+            grossRevenue: item.lineTotal,
+          });
+        }
+      }
+
+      topSellingProducts = Array.from(productMap.values())
+        .sort((a, b) => b.unitsSold.minus(a.unitsSold).toNumber())
+        .slice(0, 5)
+        .map((p) => {
+          const netSold = p.unitsSold.minus(p.unitsReturned);
+          return {
+            productId: p.productId,
+            variantId: p.variantId,
+            productName: p.productName,
+            variantName: p.variantName,
+            sku: p.sku,
+            unitsSold: Math.round(p.unitsSold.toNumber()),
+            unitsReturned: Math.round(p.unitsReturned.toNumber()),
+            netUnitsSold: Math.max(0, Math.round(netSold.toNumber())),
+            grossRevenue: p.grossRevenue.toFixed(2),
+          };
+        });
+    }
+
+    // 9. Recent Activity formatting
+    let recentActivity: DashboardActivityItem[] = [];
+    if (isInventoryManager) {
+      const movements = recentActivityRaw as Array<{
+        id: string;
+        movementType: string;
+        quantityDelta: Prisma.Decimal;
+        createdAt: Date;
+        reason: string | null;
+        product: { name: string };
+        branch: { name: string; code: string };
+      }>;
+      recentActivity = movements.map((m) => ({
+        id: m.id,
+        type: "INVENTORY_MOVEMENT" as const,
+        title: `Stock Adjustment: ${m.product.name}`,
+        description: `${m.quantityDelta.greaterThan(0) ? "+" : ""}${m.quantityDelta.toFixed(0)} units • Type: ${m.movementType}${m.reason ? ` • ${m.reason}` : ""}`,
+        timestamp: m.createdAt.toISOString(),
+        branchName: m.branch.name,
+        branchCode: m.branch.code,
+        amount: null,
+      }));
+    } else {
+      const [sales, returns, movements] = recentActivityRaw as [
+        Array<{
+          id: string;
+          invoiceNumber: string;
+          totalAmount: Prisma.Decimal;
+          saleDate: Date;
+          branch: { name: string; code: string };
+          _count: { items: number };
+        }>,
+        Array<{
+          id: string;
+          returnNumber: string;
+          refundedAmount: Prisma.Decimal;
+          returnDate: Date;
+          branch: { name: string; code: string };
+          _count: { items: number };
+        }>,
+        Array<{
+          id: string;
+          movementType: string;
+          quantityDelta: Prisma.Decimal;
+          createdAt: Date;
+          reason: string | null;
+          product: { name: string };
+          branch: { name: string; code: string };
+        }>
+      ];
+
+      const events: DashboardActivityItem[] = [
+        ...sales.map((s) => ({
+          id: s.id,
+          type: "SALE" as const,
+          title: `Sale #${s.invoiceNumber} Completed`,
+          description: `${s._count.items} item${s._count.items === 1 ? "" : "s"} fulfilled`,
+          timestamp: s.saleDate.toISOString(),
+          branchName: s.branch.name,
+          branchCode: s.branch.code,
+          amount: s.totalAmount.toFixed(2),
+        })),
+        ...returns.map((r) => ({
+          id: r.id,
+          type: "SALE_RETURN" as const,
+          title: `Return #${r.returnNumber} Processed`,
+          description: `${r._count.items} item${r._count.items === 1 ? "" : "s"} returned`,
+          timestamp: r.returnDate.toISOString(),
+          branchName: r.branch.name,
+          branchCode: r.branch.code,
+          amount: r.refundedAmount.toFixed(2),
+        })),
+        ...movements.map((m) => ({
+          id: m.id,
+          type: "INVENTORY_MOVEMENT" as const,
+          title: `Stock Movement: ${m.product.name}`,
+          description: `${m.quantityDelta.greaterThan(0) ? "+" : ""}${m.quantityDelta.toFixed(0)} units • ${m.movementType}`,
+          timestamp: m.createdAt.toISOString(),
+          branchName: m.branch.name,
+          branchCode: m.branch.code,
+          amount: null,
+        })),
+      ];
+
+      events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      recentActivity = events.slice(0, 10);
+    }
+
+    // 10. Branch summaries for multi-branch view (OWNER, ACCOUNTANT, or multi-branch MANAGER)
     let branchSummaries: DashboardBranchSummary[] = [];
 
     const canViewMultiBranch =
@@ -635,7 +960,7 @@ export async function getDashboardMetricsAction(
       if (activeBranches.length > 0) {
         const branchIds = activeBranches.map((b) => b.id);
 
-        const [branchSalesAgg, branchStockAgg] = await Promise.all([
+        const [branchSalesAgg, branchStockAgg, branchReturnsAgg] = await Promise.all([
           isInventoryManager
             ? Promise.resolve([])
             : db.sale.groupBy({
@@ -663,6 +988,18 @@ export async function getDashboardMetricsAction(
               reorderLevel: true,
             },
           }),
+
+          isInventoryManager
+            ? Promise.resolve([])
+            : db.saleReturn.groupBy({
+                by: ["branchId"],
+                where: {
+                  organizationId,
+                  branchId: { in: branchIds },
+                  ...(dateFilterClause !== undefined ? { returnDate: dateFilterClause } : {}),
+                },
+                _sum: { refundedAmount: true },
+              }),
         ]);
 
         const salesByBranch = new Map<string, { revenue: string; count: number }>();
@@ -673,21 +1010,36 @@ export async function getDashboardMetricsAction(
           });
         }
 
+        const refundsByBranch = new Map<string, Prisma.Decimal>();
+        for (const item of branchReturnsAgg) {
+          refundsByBranch.set(item.branchId, item._sum.refundedAmount ?? new Prisma.Decimal("0.00"));
+        }
+
         const lowStockByBranch = new Map<string, number>();
         for (const item of branchStockAgg) {
-          if (item.reorderLevel !== null && item.quantity.lessThanOrEqualTo(item.reorderLevel)) {
+          if (
+            item.reorderLevel !== null &&
+            item.quantity.greaterThan(0) &&
+            item.quantity.lessThanOrEqualTo(item.reorderLevel)
+          ) {
             lowStockByBranch.set(item.branchId, (lowStockByBranch.get(item.branchId) || 0) + 1);
           }
         }
 
         branchSummaries = activeBranches.map((b) => {
           const s = salesByBranch.get(b.id);
+          const grossDec = s ? new Prisma.Decimal(s.revenue) : new Prisma.Decimal("0.00");
+          const refundDec = refundsByBranch.get(b.id) ?? new Prisma.Decimal("0.00");
+          const netDec = grossDec.minus(refundDec);
+          const netRevenue = netDec.greaterThan(0) ? netDec.toFixed(2) : "0.00";
+
           return {
             id: b.id,
             name: b.name,
             code: b.code,
-            grossRevenue: s?.revenue ?? "0.00",
-            completedOrderCount: s?.count ?? 0,
+            grossRevenue: isInventoryManager ? undefined : (s?.revenue ?? "0.00"),
+            netSalesRevenue: isInventoryManager ? undefined : netRevenue,
+            completedOrderCount: isInventoryManager ? undefined : (s?.count ?? 0),
             lowStockCount: lowStockByBranch.get(b.id) || 0,
           };
         });
@@ -716,6 +1068,16 @@ export async function getDashboardMetricsAction(
         totalTrackedItems,
       },
       branchSummaries,
+      stockAlerts: {
+        outOfStockItems: outOfStockAlertItems,
+        lowStockItems: lowStockAlertItems,
+        totalOutOfStockCount: outOfStockCount,
+        totalLowStockCount: lowStockCount,
+        hasMoreOutOfStock: outOfStockCount > outOfStockAlertItems.length,
+        hasMoreLowStock: lowStockCount > lowStockAlertItems.length,
+      },
+      topSellingProducts,
+      recentActivity,
     };
 
     return {

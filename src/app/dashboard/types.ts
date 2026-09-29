@@ -56,6 +56,7 @@ export interface DashboardBranchSummary {
   name: string;
   code: string;
   grossRevenue?: string;
+  netSalesRevenue?: string;
   completedOrderCount?: number;
   lowStockCount?: number;
 }
@@ -64,6 +65,52 @@ export interface SelectedBranchInfo {
   id: string;
   name: string;
   code: string;
+}
+
+export interface DashboardStockAlertItem {
+  id: string;
+  productName: string;
+  variantName: string | null;
+  sku: string | null;
+  quantity: string;
+  reorderLevel: string | null;
+  unit: string;
+  branchId: string;
+  branchName: string;
+  branchCode: string;
+  status: "OUT_OF_STOCK" | "LOW_STOCK";
+}
+
+export interface DashboardStockAlertsDTO {
+  outOfStockItems: DashboardStockAlertItem[];
+  lowStockItems: DashboardStockAlertItem[];
+  totalOutOfStockCount: number;
+  totalLowStockCount: number;
+  hasMoreOutOfStock: boolean;
+  hasMoreLowStock: boolean;
+}
+
+export interface DashboardTopProductItem {
+  productId: string;
+  variantId: string | null;
+  productName: string;
+  variantName: string | null;
+  sku: string | null;
+  unitsSold: number;
+  unitsReturned: number;
+  netUnitsSold: number;
+  grossRevenue: string;
+}
+
+export interface DashboardActivityItem {
+  id: string;
+  type: "SALE" | "SALE_RETURN" | "INVENTORY_MOVEMENT";
+  title: string;
+  description: string;
+  timestamp: string;
+  branchName: string;
+  branchCode: string;
+  amount: string | null;
 }
 
 export interface DashboardMetricsDTO {
@@ -80,6 +127,9 @@ export interface DashboardMetricsDTO {
   netSalesRevenue: string | null; // grossRevenue - totalRefundedAmount (null for INVENTORY_MANAGER)
   inventoryMetrics: DashboardInventoryMetrics;
   branchSummaries?: DashboardBranchSummary[]; // Multi-branch comparison for authorized roles
+  stockAlerts: DashboardStockAlertsDTO;
+  topSellingProducts: DashboardTopProductItem[] | null; // null for INVENTORY_MANAGER
+  recentActivity: DashboardActivityItem[];
 }
 
 export interface GetDashboardMetricsInput {

@@ -20,6 +20,11 @@ import {
   CheckCircle2,
   Store,
   ChevronDown,
+  ArrowUpRight,
+  Users,
+  Layers,
+  Activity,
+  Award,
 } from "lucide-react";
 import { signOutAction } from "@/app/auth/actions";
 import { getDashboardMetricsAction } from "./actions";
@@ -28,6 +33,10 @@ import type {
   DashboardMetricsDTO,
   DashboardDatePreset,
   SelectedBranchInfo,
+  DashboardStockAlertItem,
+  DashboardTopProductItem,
+  DashboardActivityItem,
+  DashboardBranchSummary,
 } from "./types";
 import { SYSTEM_ROLES } from "@/lib/roles";
 
@@ -107,6 +116,25 @@ function formatPeriodDisplay(
     return `${sStr} – ${eStr}`;
   } catch {
     return `${dateRange.startDate.slice(0, 10)} to ${dateRange.endDate.slice(0, 10)}`;
+  }
+}
+
+/**
+ * Formats timestamp strings for activity logs.
+ */
+function formatActivityTime(isoString: string, timeZone: string): string {
+  try {
+    const date = new Date(isoString);
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(date);
+  } catch {
+    return isoString.slice(0, 16).replace("T", " ");
   }
 }
 
@@ -231,6 +259,66 @@ export function DashboardView({
     INVENTORY_MANAGER: "bg-orange-500/10 text-orange-400 border-orange-500/20",
   };
 
+  // Quick Action cards filtered by role permissions
+  const quickActions = [
+    {
+      title: "New Sale (POS)",
+      description: "Launch register for immediate checkout",
+      href: `/pos?org=${data.organizationId}`,
+      icon: Store,
+      allowedRoles: ["OWNER", "MANAGER", "CASHIER"],
+      color: "hover:border-emerald-500/50 hover:bg-emerald-950/20 text-emerald-400",
+    },
+    {
+      title: "Sales Orders",
+      description: "Review transactions and reprint receipts",
+      href: `/sales?org=${data.organizationId}`,
+      icon: ShoppingBag,
+      allowedRoles: ["OWNER", "MANAGER", "CASHIER", "ACCOUNTANT"],
+      color: "hover:border-blue-500/50 hover:bg-blue-950/20 text-blue-400",
+    },
+    {
+      title: "Process Return",
+      description: "Issue customer refunds or restock items",
+      href: `/sales/returns?org=${data.organizationId}`,
+      icon: RotateCcw,
+      allowedRoles: ["OWNER", "MANAGER", "CASHIER", "ACCOUNTANT"],
+      color: "hover:border-amber-500/50 hover:bg-amber-950/20 text-amber-400",
+    },
+    {
+      title: "Manage Inventory",
+      description: "Track stock counts, reorder and adjust",
+      href: `/inventory?org=${data.organizationId}`,
+      icon: Boxes,
+      allowedRoles: ["OWNER", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "ACCOUNTANT"],
+      color: "hover:border-indigo-500/50 hover:bg-indigo-950/20 text-indigo-400",
+    },
+    {
+      title: "Purchase Orders",
+      description: "Create POs and receive supplier stock",
+      href: `/purchasing?org=${data.organizationId}`,
+      icon: Receipt,
+      allowedRoles: ["OWNER", "MANAGER", "INVENTORY_MANAGER", "ACCOUNTANT"],
+      color: "hover:border-sky-500/50 hover:bg-sky-950/20 text-sky-400",
+    },
+    {
+      title: "Customers",
+      description: "Manage buyer accounts and loyalty",
+      href: `/customers?org=${data.organizationId}`,
+      icon: Users,
+      allowedRoles: ["OWNER", "MANAGER", "CASHIER", "ACCOUNTANT"],
+      color: "hover:border-purple-500/50 hover:bg-purple-950/20 text-purple-400",
+    },
+    {
+      title: "Catalog",
+      description: "Configure products, variants and pricing",
+      href: `/catalog?org=${data.organizationId}`,
+      icon: Layers,
+      allowedRoles: ["OWNER", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "ACCOUNTANT"],
+      color: "hover:border-slate-500/50 hover:bg-slate-900/40 text-slate-300",
+    },
+  ].filter((action) => action.allowedRoles.includes(data.userRole));
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Top Application Header */}
@@ -337,8 +425,7 @@ export function DashboardView({
               Inventory Manager Scoped Access:
             </strong>{" "}
             Financial metrics and sales figures are strictly restricted for your role. You have
-            full visibility of authorized inventory thresholds, out-of-stock items, and stock
-            reorder requirements.
+            full visibility of authorized inventory thresholds, stock alerts, and inventory operations.
           </div>
         </div>
       )}
@@ -523,6 +610,38 @@ export function DashboardView({
         </div>
       </section>
 
+      {/* Quick Action Navigation Grid (Step 19C) */}
+      <section aria-labelledby="quick-actions-heading" className="space-y-3">
+        <h2 id="quick-actions-heading" className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Operational Quick Actions
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.title}
+                href={action.href}
+                className={`group flex flex-col justify-between p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 transition-all duration-150 ${action.color}`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
+                  <ArrowUpRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-semibold text-white group-hover:text-emerald-300 transition-colors">
+                    {action.title}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                    {action.description}
+                  </p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Primary KPI Metrics Content */}
       <main className="space-y-8" aria-label="Executive Performance Metrics">
         {/* Sales & Financial Section (Hidden for INVENTORY_MANAGER) */}
@@ -642,9 +761,9 @@ export function DashboardView({
             </h2>
             <Link
               href={`/inventory?org=${data.organizationId}`}
-              className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium"
+              className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium flex items-center gap-1"
             >
-              View Full Inventory &rarr;
+              Full Stock Ledger <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
@@ -687,6 +806,372 @@ export function DashboardView({
             />
           </div>
         </section>
+
+        {/* Step 19C: Operational Insights (Stock Alerts & Top Products) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Stock Alerts Detail Card */}
+          <section
+            aria-labelledby="stock-alerts-detail-heading"
+            className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <h3
+                  id="stock-alerts-detail-heading"
+                  className="text-xs font-semibold uppercase tracking-wider text-slate-200"
+                >
+                  Critical Stock Alerts
+                </h3>
+              </div>
+              <Link
+                href={`/inventory?org=${data.organizationId}`}
+                className="text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                Reorder in Inventory &rarr;
+              </Link>
+            </div>
+
+            {data.stockAlerts.outOfStockItems.length === 0 &&
+            data.stockAlerts.lowStockItems.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 space-y-1">
+                <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto mb-1.5" />
+                <p className="text-slate-300 font-medium">All Stock Levels Nominal</p>
+                <p>No critical reorder thresholds reached in authorized branches.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Out of Stock Items */}
+                {data.stockAlerts.outOfStockItems.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                      Out of Stock ({data.stockAlerts.totalOutOfStockCount})
+                    </div>
+                    <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 overflow-hidden bg-slate-900/40">
+                      {data.stockAlerts.outOfStockItems.map((item: DashboardStockAlertItem) => (
+                        <div
+                          key={item.id}
+                          className="p-2.5 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium text-white truncate">
+                              {item.productName}
+                              {item.variantName && (
+                                <span className="text-slate-400 text-[11px] ml-1">
+                                  ({item.variantName})
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                              <span>SKU: {item.sku || "N/A"}</span>
+                              <span>•</span>
+                              <span>{item.branchName}</span>
+                            </div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0">
+                            0 {item.unit}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Low Stock Items */}
+                {data.stockAlerts.lowStockItems.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      Low Stock ({data.stockAlerts.totalLowStockCount})
+                    </div>
+                    <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 overflow-hidden bg-slate-900/40">
+                      {data.stockAlerts.lowStockItems.map((item: DashboardStockAlertItem) => (
+                        <div
+                          key={item.id}
+                          className="p-2.5 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium text-white truncate">
+                              {item.productName}
+                              {item.variantName && (
+                                <span className="text-slate-400 text-[11px] ml-1">
+                                  ({item.variantName})
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                              <span>SKU: {item.sku || "N/A"}</span>
+                              <span>•</span>
+                              <span>{item.branchName}</span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              {item.quantity} / {item.reorderLevel || "—"} {item.unit}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Top-Selling Products (Hidden for INVENTORY_MANAGER) */}
+          {!isInventoryManager && (
+            <section
+              aria-labelledby="top-selling-heading"
+              className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Award className="w-4 h-4 text-emerald-400" />
+                  <h3
+                    id="top-selling-heading"
+                    className="text-xs font-semibold uppercase tracking-wider text-slate-200"
+                  >
+                    Top Products (Gross Units Sold)
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-500">Period Rank</span>
+              </div>
+
+              {!data.topSellingProducts || data.topSellingProducts.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400 space-y-1">
+                  <ShoppingBag className="w-6 h-6 text-slate-600 mx-auto mb-1.5" />
+                  <p className="text-slate-300 font-medium">No Sales in Period</p>
+                  <p>Product performance will populate as completed sales are recorded.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 overflow-hidden bg-slate-900/40">
+                  {data.topSellingProducts.map((p: DashboardTopProductItem, index: number) => (
+                    <div
+                      key={p.productId + (p.variantId || "")}
+                      className="p-2.5 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-800 text-[10px] font-bold text-slate-300 shrink-0">
+                          #{index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-medium text-white truncate">
+                            {p.productName}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            SKU: {p.sku || "N/A"}
+                            {p.unitsReturned > 0 && (
+                              <span className="text-rose-400/80 ml-2">
+                                ({p.unitsReturned} returned)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="font-semibold text-emerald-400">
+                          {formatCurrencyAmount(p.grossRevenue, data.currency)}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-medium">
+                          {p.unitsSold.toLocaleString()} units sold
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* If INVENTORY_MANAGER, show placeholder for balanced layout */}
+          {isInventoryManager && (
+            <section
+              aria-label="Stock Optimization Tips"
+              className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-3"
+            >
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-orange-400" />
+                Inventory Reordering Guidance
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Items marked as <strong>Low Stock</strong> have reached or dipped below their branch
+                reorder threshold. Create a Purchase Order in the Purchasing module to replenish
+                safety stock before out-of-stock events disrupt retail fulfillment.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href={`/purchasing?org=${data.organizationId}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600/20 text-orange-300 border border-orange-500/30 text-xs font-semibold hover:bg-orange-600/30 transition-colors"
+                >
+                  Create Replenishment PO &rarr;
+                </Link>
+              </div>
+            </section>
+          )}
+        </div>
+
+        {/* Step 19C: Recent Operational Activity */}
+        <section
+          aria-labelledby="recent-activity-heading"
+          className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-blue-400" />
+              <h3
+                id="recent-activity-heading"
+                className="text-xs font-semibold uppercase tracking-wider text-slate-200"
+              >
+                Recent Operational Activity
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-500">Latest Transacted Events</span>
+          </div>
+
+          {data.recentActivity.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-400">
+              No recent operational events recorded.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 overflow-hidden bg-slate-900/40">
+              {data.recentActivity.map((event: DashboardActivityItem) => {
+                const isSale = event.type === "SALE";
+                const isReturn = event.type === "SALE_RETURN";
+
+                return (
+                  <div
+                    key={event.id}
+                    className="p-3 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`p-1.5 rounded-lg border shrink-0 ${
+                          isSale
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : isReturn
+                            ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                        }`}
+                      >
+                        {isSale ? (
+                          <ShoppingBag className="w-4 h-4" />
+                        ) : isReturn ? (
+                          <RotateCcw className="w-4 h-4" />
+                        ) : (
+                          <Boxes className="w-4 h-4" />
+                        )}
+                      </span>
+
+                      <div className="min-w-0">
+                        <div className="font-medium text-white truncate">
+                          {event.title}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">
+                          {event.description} •{" "}
+                          <span className="text-slate-500">
+                            {event.branchName} ({event.branchCode})
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      {event.amount && (
+                        <div
+                          className={`font-semibold ${
+                            isReturn ? "text-rose-400" : "text-emerald-400"
+                          }`}
+                        >
+                          {isReturn ? "-" : ""}
+                          {formatCurrencyAmount(event.amount, data.currency)}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-slate-500">
+                        {formatActivityTime(event.timestamp, data.timezone)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Step 19C: Branch Performance Comparison (Owner/Accountant/Multi-branch Manager) */}
+        {data.branchSummaries &&
+          data.branchSummaries.length > 1 &&
+          !data.selectedBranch && (
+            <section
+              aria-labelledby="branch-comparison-heading"
+              className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-emerald-400" />
+                  <h3
+                    id="branch-comparison-heading"
+                    className="text-xs font-semibold uppercase tracking-wider text-slate-200"
+                  >
+                    Branch Performance Comparison
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  Consolidated View Across {data.branchSummaries.length} Branches
+                </span>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-slate-800/80">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-900/80 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">Branch</th>
+                      {!isInventoryManager && <th className="p-3">Gross Sales</th>}
+                      {!isInventoryManager && <th className="p-3">Net Sales</th>}
+                      {!isInventoryManager && <th className="p-3">Orders</th>}
+                      <th className="p-3">Low Stock Alerts</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
+                    {data.branchSummaries.map((b: DashboardBranchSummary) => (
+                      <tr key={b.id} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="p-3 font-medium text-white">
+                          {b.name}{" "}
+                          <span className="text-slate-500 text-[11px]">({b.code})</span>
+                        </td>
+                        {!isInventoryManager && (
+                          <td className="p-3 font-semibold text-emerald-400">
+                            {formatCurrencyAmount(b.grossRevenue, data.currency)}
+                          </td>
+                        )}
+                        {!isInventoryManager && (
+                          <td className="p-3 font-semibold text-white">
+                            {formatCurrencyAmount(b.netSalesRevenue, data.currency)}
+                          </td>
+                        )}
+                        {!isInventoryManager && (
+                          <td className="p-3 text-slate-300 font-medium">
+                            {b.completedOrderCount?.toLocaleString() ?? 0}
+                          </td>
+                        )}
+                        <td className="p-3">
+                          {b.lowStockCount && b.lowStockCount > 0 ? (
+                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              {b.lowStockCount} items
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 text-[11px]">0</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
         {/* Empty State Banner (when no sales and no stock alerts) */}
         {!isInventoryManager &&
