@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { listSalesAction } from "./actions";
 import { SalesTable } from "./sales-table";
+import { SaleDetailDrawer } from "./sale-detail-drawer";
 import {
   type SerializedPaginatedSales,
   type SaleStatus,
@@ -220,6 +221,7 @@ export function SalesView({
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
 
   // Concurrency guard to prevent stale responses from overwriting newer user requests
   const requestIdRef = useRef(0);
@@ -705,6 +707,7 @@ export function SalesView({
               timeZone={organizationTimezone}
               isLoading={isPending}
               onPageChange={handlePageChange}
+              onSelectSale={(id) => setSelectedSaleId(id)}
             />
           </div>
         ) : (
@@ -745,6 +748,21 @@ export function SalesView({
           </div>
         )}
       </div>
+
+      {/* Sale Detail Drawer */}
+      <SaleDetailDrawer
+        isOpen={!!selectedSaleId}
+        saleId={selectedSaleId}
+        organizationId={organizationId}
+        organizationName={organizationName}
+        organizationCurrency={organizationCurrency}
+        organizationTimezone={organizationTimezone}
+        userRole={userRole}
+        onClose={() => setSelectedSaleId(null)}
+        onSaleVoided={() => {
+          fetchSales(currentPage);
+        }}
+      />
     </main>
   );
 }

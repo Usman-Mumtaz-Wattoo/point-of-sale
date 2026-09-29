@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, User, Store, Receipt, Calendar, CreditCard } from "lucide-react";
+import { ChevronLeft, ChevronRight, User, Store, Receipt, Calendar, CreditCard, Eye } from "lucide-react";
 import type { SerializedSaleSummary } from "./types";
 
 interface SalesTableProps {
@@ -13,6 +13,7 @@ interface SalesTableProps {
   timeZone?: string;
   isLoading?: boolean;
   onPageChange: (newPage: number) => void;
+  onSelectSale?: (saleId: string) => void;
 }
 
 function formatCurrency(amount: string | number, currency = "USD"): string {
@@ -58,6 +59,7 @@ export function SalesTable({
   timeZone = "UTC",
   isLoading = false,
   onPageChange,
+  onSelectSale,
 }: SalesTableProps) {
   const startItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
   const endItem = Math.min(page * pageSize, totalItems);
@@ -100,6 +102,9 @@ export function SalesTable({
                 <th scope="col" className="px-4 py-3.5 text-center">
                   Status
                 </th>
+                <th scope="col" className="px-4 py-3.5 text-right">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-normal">
@@ -111,7 +116,8 @@ export function SalesTable({
                 return (
                   <tr
                     key={sale.id}
-                    className={`transition-colors ${
+                    onClick={() => onSelectSale?.(sale.id)}
+                    className={`transition-colors cursor-pointer ${
                       isVoided
                         ? "bg-rose-950/10 hover:bg-rose-950/20 text-slate-400"
                         : "hover:bg-slate-900/60"
@@ -235,6 +241,22 @@ export function SalesTable({
                           COMPLETED
                         </span>
                       )}
+                    </td>
+
+                    {/* Action */}
+                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectSale?.(sale.id);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors cursor-pointer text-[11px]"
+                        title="View Sale Details"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>View</span>
+                      </button>
                     </td>
                   </tr>
                 );
