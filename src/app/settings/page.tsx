@@ -9,8 +9,15 @@ export const metadata = {
   description: "Manage business identity, contact details, currency, and timezone settings.",
 };
 
-export default async function SettingsPage() {
+interface SettingsPageProps {
+  searchParams: Promise<{
+    org?: string;
+  }>;
+}
+
+export default async function SettingsPage(props: SettingsPageProps) {
   const user = await requireAuth();
+  const searchParams = await props.searchParams;
 
   // Zero-membership handling
   if (user.memberships.length === 0) {
@@ -40,25 +47,20 @@ export default async function SettingsPage() {
     );
   }
 
-  // Find user's active membership
-  const activeMembership = user.memberships.find(
+  const activeMemberships = user.memberships.filter(
     (m) => m.isActive && m.organization && m.organization.isActive
   );
 
-  // Server-side OWNER role enforcement
-  if (!activeMembership || activeMembership.role.name !== SYSTEM_ROLES.OWNER) {
-    const userRole = activeMembership?.role?.name || "Staff";
+  if (activeMemberships.length === 0) {
     return (
       <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex items-center justify-center">
         <div className="max-w-md w-full text-center bg-slate-950 border border-slate-800 rounded-2xl p-8 space-y-4 shadow-xl">
           <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
             🚫
           </div>
-          <h1 className="text-xl font-bold text-white">Access Denied</h1>
+          <h1 className="text-xl font-bold text-white">No Active Membership</h1>
           <p className="text-sm text-slate-400">
-            Your current role (<strong className="text-slate-200">{userRole}</strong>) does not have
-            permission to manage organization settings. Only the organization{" "}
-            <strong className="text-emerald-400">OWNER</strong> can modify these settings.
+            Your account does not have an active membership in any operational organization.
           </p>
           <div className="pt-2">
             <Link
@@ -73,8 +75,110 @@ export default async function SettingsPage() {
     );
   }
 
-  // Fetch verified initial settings via server action
-  const settingsRes = await getOrganizationSettingsAction();
+  // Multi-organization selection handling
+  const requestedOrgId = searchParams.org?.trim();
+  let activeMembership = activeMemberships[0];
+
+  if (requestedOrgId) {
+    const match = activeMemberships.find((m) => m.organizationId === requestedOrgId);
+    if (!match) {
+      return (
+        <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex items-center justify-center">
+          <div className="max-w-md w-full text-center bg-slate-950 border border-slate-800 rounded-2xl p-8 space-y-4 shadow-xl">
+            <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
+              ⚠️
+            </div>
+            <h1 className="text-xl font-bold text-white">Organization Not Found</h1>
+            <p className="text-sm text-slate-400">
+              The requested organization could not be found or you do not have an active membership
+              in it.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+              >
+                &larr; Return to Dashboard
+              </Link>
+            </div>
+          </div>
+        </main>
+      );
+    }
+    activeMembership = match;
+  } else {
+    // If user has multiple organizations, do not guess: show clear organization selector
+    if (activeMemberships.length > 1) {
+      return (
+        <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex items-center justify-center">
+          <div className="max-w-md w-full text-center bg-slate-950 border border-slate-800 rounded-2xl p-8 space-y-5 shadow-xl">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-xl border border-emerald-500/20">
+              🏢
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-xl font-bold text-white">Select Business</h1>
+              <p className="text-sm text-slate-400">
+                You belong to multiple businesses. Please select which organization you want to
+                manage settings for:
+              </p>
+            </div>
+            <div className="space-y-2 pt-2 text-left">
+              {activeMemberships.map((m) => (
+                <Link
+                  key={m.organizationId}
+                  href={`/settings?org=${m.organizationId}`}
+                  className="flex items-center justify-between p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:border-emerald-500 hover:bg-emerald-950/20 transition-colors"
+                >
+                  <div>
+                    <span className="font-semibold text-sm text-white block">
+                      {m.organization.name}
+                    </span>
+                    <span className="text-xs text-slate-400">Role: {m.role.name}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-emerald-400">Select &rarr;</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </main>
+      );
+    }
+    activeMembership = activeMemberships[0];
+  }
+
+  // Server-side OWNER role enforcement
+  if (activeMembership.role.name !== SYSTEM_ROLES.OWNER) {
+    const userRole = activeMembership.role?.name || "Staff";
+    return (
+      <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex items-center justify-center">
+        <div className="max-w-md w-full text-center bg-slate-950 border border-slate-800 rounded-2xl p-8 space-y-4 shadow-xl">
+          <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
+            🚫
+          </div>
+          <h1 className="text-xl font-bold text-white">Access Denied</h1>
+          <p className="text-sm text-slate-400">
+            Your current role (<strong className="text-slate-200">{userRole}</strong>) does not have
+            permission to manage organization settings for{" "}
+            <strong className="text-slate-200">{activeMembership.organization.name}</strong>. Only the
+            organization <strong className="text-emerald-400">OWNER</strong> can modify these settings.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+            >
+              &larr; Return to Dashboard
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const organization = activeMembership.organization;
+
+  // Fetch verified initial settings via server action with verified organization ID
+  const settingsRes = await getOrganizationSettingsAction(organization.id);
 
   if (!settingsRes.success) {
     return (
@@ -89,7 +193,7 @@ export default async function SettingsPage() {
           </p>
           <div className="pt-2">
             <Link
-              href="/settings"
+              href={`/settings?org=${organization.id}`}
               className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
             >
               Try Again
@@ -103,6 +207,8 @@ export default async function SettingsPage() {
   return (
     <SettingsView
       initialData={settingsRes.data}
+      organizationId={organization.id}
+      organizationName={organization.name}
       userEmail={user.email}
       userName={user.name}
     />

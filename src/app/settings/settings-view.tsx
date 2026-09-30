@@ -12,11 +12,19 @@ import { updateOrganizationProfileAction } from "./actions";
 
 interface SettingsViewProps {
   initialData: OrganizationProfileDTO;
+  organizationId: string;
+  organizationName: string;
   userEmail: string;
   userName: string;
 }
 
-export function SettingsView({ initialData, userEmail, userName }: SettingsViewProps) {
+export function SettingsView({
+  initialData,
+  organizationId,
+  organizationName,
+  userEmail,
+  userName,
+}: SettingsViewProps) {
   const [profile, setProfile] = useState<OrganizationProfileDTO>(initialData);
   const [formData, setFormData] = useState<UpdateOrganizationProfileInput>({
     name: initialData.name,
@@ -81,7 +89,7 @@ export function SettingsView({ initialData, userEmail, userName }: SettingsViewP
     setFieldErrors({});
 
     startTransition(async () => {
-      const res = await updateOrganizationProfileAction(formData);
+      const res = await updateOrganizationProfileAction(formData, organizationId);
       if (!res.success) {
         setGlobalError(res.error);
         if (res.fieldErrors) {
@@ -113,7 +121,7 @@ export function SettingsView({ initialData, userEmail, userName }: SettingsViewP
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <Link
-              href="/dashboard"
+              href={`/dashboard?org=${organizationId}`}
               className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
             >
               &larr; Back to Dashboard
@@ -122,7 +130,7 @@ export function SettingsView({ initialData, userEmail, userName }: SettingsViewP
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
               <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                Organization Settings
+                {organizationName} — Settings
               </h1>
             </div>
           </div>
@@ -140,19 +148,19 @@ export function SettingsView({ initialData, userEmail, userName }: SettingsViewP
         {/* Sub-Navigation Tabs */}
         <div className="max-w-6xl mx-auto mt-3 flex items-center gap-2 border-t border-slate-800/80 pt-2.5">
           <Link
-            href="/settings"
+            href={`/settings?org=${organizationId}`}
             className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 transition-colors"
           >
             🏢 Organization Profile
           </Link>
           <Link
-            href="/settings/branches"
+            href={`/settings/branches?org=${organizationId}`}
             className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
           >
             🏪 Branch Administration
           </Link>
           <Link
-            href="/settings/staff"
+            href={`/settings/staff?org=${organizationId}`}
             className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
           >
             👥 Staff & Permissions
@@ -200,6 +208,7 @@ export function SettingsView({ initialData, userEmail, userName }: SettingsViewP
 
         {/* Settings Form */}
         <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+          <input type="hidden" name="organizationId" value={organizationId} />
           {/* Card 1: General Business Identity */}
           <section className="bg-slate-950 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5 shadow-sm">
             <div className="border-b border-slate-800/80 pb-3">
