@@ -13,6 +13,7 @@ import {
   UnauthorizedRoleError,
   MembershipNotFoundError,
   CrossTenantViolationError,
+  TenantContextError,
 } from "@/lib/sales";
 
 export interface CheckoutActionResult {
@@ -43,6 +44,28 @@ export async function checkoutSaleAction(
       customerId: sale.customerId,
     };
   } catch (err: unknown) {
+    if (err instanceof TenantContextError) {
+      if (err.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+        return { error: "Multiple organizations found. Please specify an organization context." };
+      }
+      if (err.code === "NO_ACTIVE_MEMBERSHIP") {
+        return { error: "No active organization membership found for your account." };
+      }
+      if (err.code === "MEMBERSHIP_NOT_FOUND") {
+        return { error: "The requested organization was not found or you do not have an active membership in it." };
+      }
+      if (err.code === "INACTIVE_MEMBERSHIP") {
+        return { error: "Your membership in the requested organization is inactive or disabled." };
+      }
+      if (err.code === "UNAUTHORIZED_ROLE") {
+        return { error: "Permission denied: Your role does not have permission to perform sales checkouts." };
+      }
+      if (err.code === "AUTH_REQUIRED") {
+        return { error: "Unauthorized: Authentication required." };
+      }
+      return { error: err.message };
+    }
+
     if (
       err instanceof SaleValidationError ||
       err instanceof SaleCustomerInactiveError ||

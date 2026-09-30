@@ -11,6 +11,11 @@ import {
   BranchNotFoundError,
 } from "./memberships";
 import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+} from "./tenant-context";
+import {
   applyStockInflowTransaction,
   applyStockOutflowTransaction,
   InsufficientStockError,
@@ -112,6 +117,8 @@ export {
   BranchNotFoundError,
   CustomerNotFoundError,
   CustomerValidationError,
+  TenantContextError,
+  AuthRequiredError,
 };
 
 // ============================================================================
@@ -423,7 +430,7 @@ export function parseSaleMoney(
 
 /**
  * Resolves the authenticated user, verifies organization membership and role permissions,
- * and validates access to the specified branch.
+ * and validates access to the specified branch using the shared tenant context resolver.
  */
 export async function resolveAuthorizedSalesContext(params: {
   organizationId?: string;
@@ -431,46 +438,40 @@ export async function resolveAuthorizedSalesContext(params: {
   requireMutation?: boolean;
   actorUser?: AppUserContext | null;
 }): Promise<AuthorizedSalesContext> {
+  const allowedRoles = params.requireMutation ? SALE_MUTATION_ROLES : SALE_READ_ROLES;
+
+  const tenantContext = await resolveTenantContext(params.organizationId, {
+    requireRoles: allowedRoles,
+    actorUser: params.actorUser,
+  });
+
   const user = params.actorUser !== undefined ? params.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
+    throw new AuthRequiredError();
   }
 
-  const requestedOrgId = params.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
+  const organizationId = tenantContext.organizationId;
+  const roleName = tenantContext.role;
 
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const organizationId = membership.organizationId;
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (params.requireMutation) {
-    if (!SALE_MUTATION_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to perform sales. Required one of: ${SALE_MUTATION_ROLES.join(", ")}.`
-      );
-    }
-  } else {
-    if (!SALE_READ_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to view sales.`
+  let hasAccess = false;
+  if (params.actorUser) {
+    const mem = user.memberships.find((m) => m.organizationId === organizationId);
+    if (roleName === SYSTEM_ROLES.OWNER) {
+      hasAccess = true;
+    } else if (mem?.branchMemberships) {
+      hasAccess = mem.branchMemberships.some(
+        (bm) => bm.branchId === params.branchId && (bm.branch?.isActive !== false)
       );
     }
   }
 
-  const hasAccess = await checkBranchAccess({
-    userId: user.id,
-    organizationId,
-    branchId: params.branchId,
-  });
+  if (!hasAccess) {
+    hasAccess = await checkBranchAccess({
+      userId: user.id,
+      organizationId,
+      branchId: params.branchId,
+    });
+  }
 
   if (!hasAccess) {
     const targetBranch = await db.branch.findUnique({
@@ -491,7 +492,7 @@ export async function resolveAuthorizedSalesContext(params: {
   }
 
   return {
-    user,
+    user: user as AppUserContext,
     organizationId,
     branchId: params.branchId,
     role: roleName,
