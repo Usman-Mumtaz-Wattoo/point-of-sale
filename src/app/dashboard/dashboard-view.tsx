@@ -174,12 +174,15 @@ export function DashboardView({
 
       startTransition(async () => {
         try {
-          const res = await getDashboardMetricsAction({
-            branchId: branchId ? branchId : undefined,
-            datePreset: preset,
-            startDate: preset === "custom" ? start : undefined,
-            endDate: preset === "custom" ? end : undefined,
-          });
+          const res = await getDashboardMetricsAction(
+            {
+              branchId: branchId ? branchId : undefined,
+              datePreset: preset,
+              startDate: preset === "custom" ? start : undefined,
+              endDate: preset === "custom" ? end : undefined,
+            },
+            data.organizationId
+          );
 
           // Check for stale response
           if (currentSeq !== requestSeqRef.current) {
@@ -202,7 +205,7 @@ export function DashboardView({
         }
       });
     },
-    []
+    [data.organizationId]
   );
 
   const handlePresetChange = (preset: DashboardDatePreset) => {

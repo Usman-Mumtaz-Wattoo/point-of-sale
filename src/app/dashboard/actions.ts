@@ -7,10 +7,16 @@ import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
 import {
   checkBranchAccess,
   CrossTenantViolationError,
-  MembershipNotFoundError,
-  UnauthorizedRoleError,
+  MembershipNotFoundError as MembershipsNotFoundError,
+  UnauthorizedRoleError as MembershipsUnauthorizedRoleError,
   BranchNotFoundError,
 } from "@/lib/memberships";
+import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+  MembershipNotFoundError,
+} from "@/lib/tenant-context";
 import type { AppUserContext } from "@/lib/sales";
 import {
   type GetDashboardMetricsInput,
@@ -41,62 +47,38 @@ interface VerifiedDashboardContext {
 }
 
 /**
- * Validates the caller's server-side session and active organization membership.
+ * Validates the caller's server-side session and active organization membership
+ * using the shared tenant context resolver.
  * Enforces strict multi-tenant boundaries and role authorization.
  */
 async function verifyDashboardContext(
   requestedOrgId?: string,
   options?: DashboardServiceOptions
 ): Promise<VerifiedDashboardContext> {
-  const user = options?.actorUser !== undefined ? options.actorUser : await getCurrentAppUser();
-  if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
-  }
-
   const candidateOrgId = requestedOrgId?.trim() || options?.organizationId?.trim() || undefined;
 
-  const membership = candidateOrgId
-    ? user.memberships.find((m) => m.organizationId === candidateOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      candidateOrgId
-        ? `User has no active membership in organization "${candidateOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (!DASHBOARD_ALLOWED_ROLES.includes(roleName)) {
-    throw new UnauthorizedRoleError(
-      `Role "${roleName}" is not permitted to access dashboard metrics.`
-    );
-  }
-
-  // Fetch organization settings (currency, timezone, name)
-  const org = await db.organization.findUnique({
-    where: { id: membership.organizationId },
-    select: {
-      id: true,
-      name: true,
-      currency: true,
-      timezone: true,
-    },
+  const tenantContext = await resolveTenantContext(candidateOrgId, {
+    requireRoles: DASHBOARD_ALLOWED_ROLES,
+    actorUser: options?.actorUser,
   });
 
-  if (!org) {
-    throw new MembershipNotFoundError("Organization does not exist.");
+  const user = options?.actorUser !== undefined ? options.actorUser : await getCurrentAppUser();
+  if (!user) {
+    throw new AuthRequiredError();
+  }
+
+  const membership = user.memberships.find((m) => m.id === tenantContext.membershipId);
+  if (!membership) {
+    throw new MembershipNotFoundError();
   }
 
   return {
-    user,
-    organizationId: org.id,
-    organizationName: org.name,
-    currency: org.currency || "USD",
-    timezone: org.timezone || "UTC",
-    role: roleName,
+    user: user as AppUserContext,
+    organizationId: tenantContext.organizationId,
+    organizationName: tenantContext.organizationName,
+    currency: tenantContext.organization.currency || "USD",
+    timezone: tenantContext.organization.timezone || "UTC",
+    role: tenantContext.role,
     membership,
   };
 }
@@ -1085,9 +1067,49 @@ export async function getDashboardMetricsAction(
       data: payload,
     };
   } catch (err: unknown) {
+    if (err instanceof TenantContextError) {
+      if (err.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+        return {
+          success: false,
+          error: "Multiple organizations found. Please specify an organization context.",
+        };
+      }
+      if (err.code === "NO_ACTIVE_MEMBERSHIP") {
+        return {
+          success: false,
+          error: "No active organization membership found for your account.",
+        };
+      }
+      if (err.code === "MEMBERSHIP_NOT_FOUND") {
+        return {
+          success: false,
+          error: "The requested organization was not found or you do not have an active membership in it.",
+        };
+      }
+      if (err.code === "INACTIVE_MEMBERSHIP") {
+        return {
+          success: false,
+          error: "Your membership in the requested organization is inactive or disabled.",
+        };
+      }
+      if (err.code === "UNAUTHORIZED_ROLE" || err.code === "OWNER_ROLE_REQUIRED") {
+        return {
+          success: false,
+          error: "Permission denied: Your role does not have access to dashboard metrics.",
+        };
+      }
+      if (err.code === "AUTH_REQUIRED") {
+        return {
+          success: false,
+          error: "Unauthorized: Authentication required.",
+        };
+      }
+      return { success: false, error: err.message };
+    }
+
     if (
-      err instanceof UnauthorizedRoleError ||
-      err instanceof MembershipNotFoundError ||
+      err instanceof MembershipsUnauthorizedRoleError ||
+      err instanceof MembershipsNotFoundError ||
       err instanceof CrossTenantViolationError ||
       err instanceof BranchNotFoundError
     ) {
