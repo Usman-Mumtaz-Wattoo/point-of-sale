@@ -1,9 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentAppUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { SYSTEM_ROLES } from "@/lib/roles";
+import { resolveOwnerTenantContext, TenantContextError } from "@/lib/tenant-context";
 import {
   type OrganizationProfileDTO,
   type UpdateOrganizationProfileInput,
@@ -44,83 +43,6 @@ function isValidSafeLogoUrl(rawUrl: string): boolean {
 }
 
 /**
- * Resolves the authenticated user's organization context strictly enforcing
- * the OWNER role and multi-tenant isolation.
- *
- * If `requestedOrgId` is provided:
- * - Verifies user has an active membership in that organization.
- * - Verifies the organization is active.
- * - Verifies user has the OWNER role in that organization.
- *
- * If `requestedOrgId` is omitted:
- * - If user has exactly one active owned organization, falls back to it.
- * - If user has multiple active owned organizations, rejects to prevent accidental cross-tenant mutation.
- * - If user has no active owned organizations, rejects with OWNER_ROLE_REQUIRED or NO_ACTIVE_MEMBERSHIP.
- */
-async function resolveOwnerOrganizationContext(requestedOrgId?: string): Promise<{
-  userId: string;
-  organizationId: string;
-  organizationName: string;
-}> {
-  const user = await getCurrentAppUser();
-  if (!user || !user.isActive) {
-    throw new Error("AUTH_REQUIRED");
-  }
-
-  let selectedMembership: (typeof user.memberships)[0];
-
-  if (requestedOrgId?.trim()) {
-    const orgId = requestedOrgId.trim();
-    const membership = user.memberships.find((m) => m.organizationId === orgId);
-
-    if (!membership) {
-      throw new Error("MEMBERSHIP_NOT_FOUND");
-    }
-
-    if (!membership.isActive || !membership.organization?.isActive) {
-      throw new Error("INACTIVE_MEMBERSHIP");
-    }
-
-    if (membership.role.name !== SYSTEM_ROLES.OWNER) {
-      throw new Error("OWNER_ROLE_REQUIRED");
-    }
-
-    selectedMembership = membership;
-  } else {
-    // Single-organization fallback vs multi-organization ambiguity check
-    const activeOwnedMemberships = user.memberships.filter(
-      (m) =>
-        m.isActive &&
-        m.organization &&
-        m.organization.isActive &&
-        m.role.name === SYSTEM_ROLES.OWNER
-    );
-
-    if (activeOwnedMemberships.length === 0) {
-      const hasAnyActive = user.memberships.some(
-        (m) => m.isActive && m.organization && m.organization.isActive
-      );
-      if (hasAnyActive) {
-        throw new Error("OWNER_ROLE_REQUIRED");
-      }
-      throw new Error("NO_ACTIVE_MEMBERSHIP");
-    }
-
-    if (activeOwnedMemberships.length > 1) {
-      throw new Error("MULTIPLE_ORGS_SPECIFY_REQUIRED");
-    }
-
-    selectedMembership = activeOwnedMemberships[0];
-  }
-
-  return {
-    userId: user.id,
-    organizationId: selectedMembership.organizationId,
-    organizationName: selectedMembership.organization.name,
-  };
-}
-
-/**
  * Retrieves organization profile settings for the authenticated owner.
  * If requestedOrgId is provided, validates active OWNER membership in that exact organization.
  * If omitted, falls back to the user's sole active owned organization if unique.
@@ -129,7 +51,7 @@ export async function getOrganizationSettingsAction(
   requestedOrgId?: string
 ): Promise<OrganizationSettingsActionResult<OrganizationProfileDTO>> {
   try {
-    const { organizationId } = await resolveOwnerOrganizationContext(requestedOrgId);
+    const { organizationId } = await resolveOwnerTenantContext(requestedOrgId);
 
     const org = await db.organization.findUnique({
       where: { id: organizationId },
@@ -176,31 +98,32 @@ export async function getOrganizationSettingsAction(
     };
   } catch (error: unknown) {
     if (error instanceof Error) {
-      if (error.message === "AUTH_REQUIRED") {
+      const code = error instanceof TenantContextError ? error.code : error.message;
+      if (code === "AUTH_REQUIRED") {
         return { success: false, error: "Authentication required to access organization settings." };
       }
-      if (error.message === "NO_ACTIVE_MEMBERSHIP") {
+      if (code === "NO_ACTIVE_MEMBERSHIP") {
         return { success: false, error: "No active business organization found for your account." };
       }
-      if (error.message === "MEMBERSHIP_NOT_FOUND") {
+      if (code === "MEMBERSHIP_NOT_FOUND") {
         return {
           success: false,
           error: "The requested organization was not found or you do not have an active membership in it.",
         };
       }
-      if (error.message === "INACTIVE_MEMBERSHIP") {
+      if (code === "INACTIVE_MEMBERSHIP") {
         return {
           success: false,
           error: "Your membership in the requested organization is inactive or disabled.",
         };
       }
-      if (error.message === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+      if (code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
         return {
           success: false,
           error: "Multiple organizations found. Please specify an organization to manage its settings.",
         };
       }
-      if (error.message === "OWNER_ROLE_REQUIRED") {
+      if (code === "OWNER_ROLE_REQUIRED" || code === "UNAUTHORIZED_ROLE") {
         return {
           success: false,
           error: "Permission denied: Only the organization owner can access or edit settings.",
@@ -227,7 +150,7 @@ export async function updateOrganizationProfileAction(
   requestedOrgId?: string
 ): Promise<OrganizationSettingsActionResult<OrganizationProfileDTO>> {
   try {
-    const { organizationId } = await resolveOwnerOrganizationContext(requestedOrgId);
+    const { organizationId } = await resolveOwnerTenantContext(requestedOrgId);
 
     const fieldErrors: Record<string, string> = {};
 
@@ -379,31 +302,32 @@ export async function updateOrganizationProfileAction(
     };
   } catch (error: unknown) {
     if (error instanceof Error) {
-      if (error.message === "AUTH_REQUIRED") {
+      const code = error instanceof TenantContextError ? error.code : error.message;
+      if (code === "AUTH_REQUIRED") {
         return { success: false, error: "Authentication required to update organization settings." };
       }
-      if (error.message === "NO_ACTIVE_MEMBERSHIP") {
+      if (code === "NO_ACTIVE_MEMBERSHIP") {
         return { success: false, error: "No active business organization found for your account." };
       }
-      if (error.message === "MEMBERSHIP_NOT_FOUND") {
+      if (code === "MEMBERSHIP_NOT_FOUND") {
         return {
           success: false,
           error: "The requested organization was not found or you do not have an active membership in it.",
         };
       }
-      if (error.message === "INACTIVE_MEMBERSHIP") {
+      if (code === "INACTIVE_MEMBERSHIP") {
         return {
           success: false,
           error: "Your membership in the requested organization is inactive or disabled.",
         };
       }
-      if (error.message === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+      if (code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
         return {
           success: false,
           error: "Multiple organizations found. Please specify an organization to manage its settings.",
         };
       }
-      if (error.message === "OWNER_ROLE_REQUIRED") {
+      if (code === "OWNER_ROLE_REQUIRED" || code === "UNAUTHORIZED_ROLE") {
         return {
           success: false,
           error: "Permission denied: Only the organization owner can modify settings.",
