@@ -2,7 +2,7 @@
 
 import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { getCurrentAppUser } from "@/lib/auth";
+import { getCurrentAppUser, getCurrentAuthUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
 import {
@@ -288,46 +288,6 @@ export async function createInvitationAction(
       };
     }
 
-    // 4. Duplicate checks
-    // 4a. Check if user already has active membership in this organization
-    const existingActiveMember = await db.organizationMembership.findFirst({
-      where: {
-        organizationId,
-        user: { email },
-        isActive: true,
-      },
-    });
-
-    if (existingActiveMember) {
-      return {
-        success: false,
-        error: "A user with this email address is already an active member of your organization.",
-        fieldErrors: {
-          email: "This email address is already an active staff member.",
-        },
-      };
-    }
-
-    // 4b. Check if a pending, unexpired invitation already exists for this email
-    const existingPendingInvitation = await db.organizationInvitation.findFirst({
-      where: {
-        organizationId,
-        email,
-        status: "PENDING",
-        expiresAt: { gt: new Date() },
-      },
-    });
-
-    if (existingPendingInvitation) {
-      return {
-        success: false,
-        error: "A pending invitation already exists for this email. You can resend it instead.",
-        fieldErrors: {
-          email: "A pending invitation already exists for this email.",
-        },
-      };
-    }
-
     // 5. Look up Role record
     const targetRole = await db.role.findUnique({
       where: { name: roleName },
@@ -343,8 +303,38 @@ export async function createInvitationAction(
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiration
 
-    // 7. Atomic transaction
+    // 7. Atomic transaction protected by PostgreSQL transaction-level advisory lock
     const newInvitation = await db.$transaction(async (tx) => {
+      // Serialize duplicate creation attempts for the same organization + normalized email
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('org_invite_lock'), hashtext(${organizationId + ":" + email}))`;
+
+      // 4a. Check if user already has active membership in this organization
+      const existingActiveMember = await tx.organizationMembership.findFirst({
+        where: {
+          organizationId,
+          user: { email },
+          isActive: true,
+        },
+      });
+
+      if (existingActiveMember) {
+        throw new Error("ALREADY_ACTIVE_MEMBER");
+      }
+
+      // 4b. Check if a pending, unexpired invitation already exists for this email
+      const existingPendingInvitation = await tx.organizationInvitation.findFirst({
+        where: {
+          organizationId,
+          email,
+          status: "PENDING",
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      if (existingPendingInvitation) {
+        throw new Error("PENDING_INVITATION_EXISTS");
+      }
+
       const invitation = await tx.organizationInvitation.create({
         data: {
           organizationId,
@@ -383,6 +373,24 @@ export async function createInvitationAction(
     };
   } catch (error: unknown) {
     if (error instanceof Error) {
+      if (error.message === "ALREADY_ACTIVE_MEMBER") {
+        return {
+          success: false,
+          error: "A user with this email address is already an active member of your organization.",
+          fieldErrors: {
+            email: "This email address is already an active staff member.",
+          },
+        };
+      }
+      if (error.message === "PENDING_INVITATION_EXISTS") {
+        return {
+          success: false,
+          error: "A pending invitation already exists for this email. You can resend it instead.",
+          fieldErrors: {
+            email: "A pending invitation already exists for this email.",
+          },
+        };
+      }
       if (error.message === "AUTH_REQUIRED") {
         return { success: false, error: "Authentication required to invite staff." };
       }
@@ -647,12 +655,13 @@ export async function updateStaffBranchAccessAction(
       ? Array.from(new Set(input.branchIds.map((b) => b.trim()).filter(Boolean)))
       : [];
 
-    // Verify all branches belong to the caller's organization
+    // Verify all branches belong to the caller's organization and are active
     if (targetBranchIds.length > 0) {
       const branches = await db.branch.findMany({
         where: {
           id: { in: targetBranchIds },
           organizationId,
+          isActive: true,
         },
         select: { id: true },
       });
@@ -660,7 +669,7 @@ export async function updateStaffBranchAccessAction(
       if (branches.length !== targetBranchIds.length) {
         return {
           success: false,
-          error: "Multi-tenant violation: One or more selected branches do not belong to this organization.",
+          error: "One or more selected branches do not belong to this organization or are inactive.",
         };
       }
     }
@@ -889,6 +898,25 @@ export async function acceptInvitationAction(
   token: string
 ): Promise<StaffActionResult<{ organizationId: string }>> {
   try {
+    // 1. Authoritative Supabase Auth user verification
+    const authUser = await getCurrentAuthUser();
+    if (!authUser || !authUser.email) {
+      return {
+        success: false,
+        error: "Please sign in or create an account to accept this invitation.",
+      };
+    }
+
+    // Strict identity check: Email must be confirmed with authentication provider
+    if (!authUser.email_confirmed_at) {
+      return {
+        success: false,
+        error: "Please verify your email address before accepting an organization invitation.",
+      };
+    }
+
+    const verifiedAuthEmail = authUser.email.trim().toLowerCase();
+
     const user = await getCurrentAppUser();
     if (!user || !user.isActive) {
       return {
@@ -904,6 +932,9 @@ export async function acceptInvitationAction(
     const tokenHash = hashToken(token.trim());
 
     const result = await db.$transaction(async (tx) => {
+      // Concurrency protection: Acquire PostgreSQL advisory lock on tokenHash
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('invitation_claim'), hashtext(${tokenHash}))`;
+
       // 1. Authoritative lookup by token hash
       const invitation = await tx.organizationInvitation.findUnique({
         where: { tokenHash },
@@ -930,12 +961,38 @@ export async function acceptInvitationAction(
         throw new Error("ORGANIZATION_INACTIVE");
       }
 
-      // 2. Strict identity verification: Authenticated user email must match invited email
-      if (user.email.toLowerCase() !== invitation.email.toLowerCase()) {
+      // 2. Strict identity verification: Verified Supabase email must match invited email
+      const invitedEmail = invitation.email.trim().toLowerCase();
+
+      if (verifiedAuthEmail !== invitedEmail) {
         throw new Error("EMAIL_MISMATCH");
       }
 
-      // 3. Upsert OrganizationMembership
+      // Synchronize internal Prisma user email if it was stale
+      if (user.email.toLowerCase() !== verifiedAuthEmail) {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { email: verifiedAuthEmail },
+        });
+      }
+
+      // 3. Atomic conditional claim: transition from PENDING -> ACCEPTED
+      const claimResult = await tx.organizationInvitation.updateMany({
+        where: {
+          id: invitation.id,
+          status: "PENDING",
+        },
+        data: {
+          status: "ACCEPTED",
+          acceptedAt: new Date(),
+        },
+      });
+
+      if (claimResult.count === 0) {
+        throw new Error("INVITATION_ALREADY_ACCEPTED");
+      }
+
+      // 4. Upsert OrganizationMembership
       const existingMembership = await tx.organizationMembership.findUnique({
         where: {
           userId_organizationId: {
@@ -970,7 +1027,7 @@ export async function acceptInvitationAction(
         membershipId = newMem.id;
       }
 
-      // 4. Assign intended branches if specified
+      // 5. Assign intended branches if specified
       if (invitation.branches.length > 0) {
         for (const b of invitation.branches) {
           await tx.branchMembership.upsert({
@@ -988,15 +1045,6 @@ export async function acceptInvitationAction(
           });
         }
       }
-
-      // 5. Mark invitation accepted (single-use guarantee)
-      await tx.organizationInvitation.update({
-        where: { id: invitation.id },
-        data: {
-          status: "ACCEPTED",
-          acceptedAt: new Date(),
-        },
-      });
 
       return { organizationId: invitation.organizationId };
     });
