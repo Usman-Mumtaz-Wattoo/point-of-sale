@@ -8,6 +8,12 @@ import {
   MembershipNotFoundError,
   UnauthorizedRoleError,
 } from "./memberships";
+import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+  type TenantUserContext,
+} from "./tenant-context";
 
 export const CATALOG_MUTATION_ROLES: readonly SystemRoleName[] = [
   SYSTEM_ROLES.OWNER,
@@ -51,59 +57,51 @@ export class VariantNotFoundError extends Error {
   }
 }
 
+export {
+  CrossTenantViolationError,
+  MembershipNotFoundError,
+  UnauthorizedRoleError,
+  TenantContextError,
+  AuthRequiredError,
+};
+
 /**
- * Resolves the authenticated user's verified tenant context.
- * Never trusts client-supplied organization IDs without verifying active membership.
+ * Resolves the authenticated user's verified tenant context using the shared tenant resolver.
+ * Never trusts client-supplied organization IDs without verifying active membership and role.
  */
 export async function resolveAuthorizedTenant(params?: {
   organizationId?: string;
   requireMutation?: boolean;
+  actorUser?: TenantUserContext | null;
 }) {
-  const user = await getCurrentAppUser();
+  const allowedRoles = params?.requireMutation
+    ? CATALOG_MUTATION_ROLES
+    : CATALOG_READ_ROLES;
+
+  const tenantContext = await resolveTenantContext(params?.organizationId, {
+    requireRoles: allowedRoles,
+    actorUser: params?.actorUser,
+  });
+
+  const user = params?.actorUser !== undefined ? params.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
+    throw new AuthRequiredError();
   }
 
-  const requestedOrgId = params?.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (params?.requireMutation) {
-    if (!CATALOG_MUTATION_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to modify the product catalog. Required one of: ${CATALOG_MUTATION_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
-  } else {
-    if (!CATALOG_READ_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to view the product catalog.`
-      );
-    }
-  }
+  const membership = user.memberships.find(
+    (m) => m.organizationId === tenantContext.organizationId
+  )!;
 
   return {
     user,
     membership,
-    organizationId: membership.organizationId,
-    role: roleName,
+    organizationId: tenantContext.organizationId,
+    role: tenantContext.role,
     isOwnerOrManager:
-      roleName === SYSTEM_ROLES.OWNER ||
-      roleName === SYSTEM_ROLES.MANAGER ||
-      roleName === SYSTEM_ROLES.INVENTORY_MANAGER,
+      tenantContext.role === SYSTEM_ROLES.OWNER ||
+      tenantContext.role === SYSTEM_ROLES.MANAGER ||
+      tenantContext.role === SYSTEM_ROLES.INVENTORY_MANAGER,
+    tenantContext,
   };
 }
 
@@ -140,10 +138,12 @@ export async function createCategory(input: {
   organizationId?: string;
   name: string;
   description?: string | null;
+  actorUser?: TenantUserContext | null;
 }) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: input.organizationId,
     requireMutation: true,
+    actorUser: input.actorUser,
   });
 
   const name = input.name?.trim();
@@ -186,10 +186,12 @@ export async function updateCategory(input: {
   name?: string;
   description?: string | null;
   isActive?: boolean;
+  actorUser?: TenantUserContext | null;
 }) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: input.organizationId,
     requireMutation: true,
+    actorUser: input.actorUser,
   });
 
   const category = await db.category.findUnique({
@@ -235,10 +237,12 @@ export async function updateCategory(input: {
 export async function getCategories(params?: {
   organizationId?: string;
   includeInactive?: boolean;
+  actorUser?: TenantUserContext | null;
 }) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: params?.organizationId,
     requireMutation: false,
+    actorUser: params?.actorUser,
   });
 
   return db.category.findMany({
@@ -266,12 +270,14 @@ export interface CreateProductInput {
   costPrice?: number | string;
   sellingPrice: number | string;
   isActive?: boolean;
+  actorUser?: TenantUserContext | null;
 }
 
 export async function createProduct(input: CreateProductInput) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: input.organizationId,
     requireMutation: true,
+    actorUser: input.actorUser,
   });
 
   const name = input.name?.trim();
@@ -414,12 +420,14 @@ export interface UpdateProductInput {
   costPrice?: number | string;
   sellingPrice?: number | string;
   isActive?: boolean;
+  actorUser?: TenantUserContext | null;
 }
 
 export async function updateProduct(input: UpdateProductInput) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: input.organizationId,
     requireMutation: true,
+    actorUser: input.actorUser,
   });
 
   const product = await db.product.findUnique({
@@ -570,10 +578,12 @@ export async function getProducts(params?: {
   includeInactive?: boolean;
   take?: number;
   skip?: number;
+  actorUser?: TenantUserContext | null;
 }) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: params?.organizationId,
     requireMutation: false,
+    actorUser: params?.actorUser,
   });
 
   const search = params?.search?.trim();
@@ -612,10 +622,12 @@ export async function getProducts(params?: {
 export async function getProductById(params: {
   organizationId?: string;
   productId: string;
+  actorUser?: TenantUserContext | null;
 }) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: params.organizationId,
     requireMutation: false,
+    actorUser: params.actorUser,
   });
 
   const product = await db.product.findUnique({
@@ -648,12 +660,14 @@ export interface CreateProductVariantInput {
   costPrice?: number | string | null;
   sellingPrice?: number | string | null;
   isActive?: boolean;
+  actorUser?: TenantUserContext | null;
 }
 
 export async function createProductVariant(input: CreateProductVariantInput) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: input.organizationId,
     requireMutation: true,
+    actorUser: input.actorUser,
   });
 
   // Verify parent product belongs to this organization
@@ -791,12 +805,14 @@ export interface UpdateProductVariantInput {
   costPrice?: number | string | null;
   sellingPrice?: number | string | null;
   isActive?: boolean;
+  actorUser?: TenantUserContext | null;
 }
 
 export async function updateProductVariant(input: UpdateProductVariantInput) {
   const { organizationId } = await resolveAuthorizedTenant({
     organizationId: input.organizationId,
     requireMutation: true,
+    actorUser: input.actorUser,
   });
 
   const variant = await db.productVariant.findUnique({

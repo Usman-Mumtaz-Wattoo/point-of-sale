@@ -7,7 +7,13 @@ import {
   updateProduct,
   createProductVariant,
   CatalogValidationError,
+  ProductNotFoundError,
+  CategoryNotFoundError,
+  VariantNotFoundError,
+  CrossTenantViolationError,
+  TenantContextError,
 } from "@/lib/catalog";
+import type { TenantUserContext } from "@/lib/tenant-context";
 
 export interface CatalogActionResult {
   error?: string;
@@ -15,9 +21,60 @@ export interface CatalogActionResult {
   message?: string;
 }
 
+export interface CatalogActionOptions {
+  actorUser?: TenantUserContext | null;
+}
+
+function formatCatalogActionError(err: unknown, fallbackMessage: string): string {
+  if (err instanceof TenantContextError) {
+    if (err.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+      return "Multiple organizations found. Please select an organization to proceed.";
+    }
+    if (err.code === "NO_ACTIVE_MEMBERSHIP") {
+      return "No active organization membership found for your account.";
+    }
+    if (err.code === "MEMBERSHIP_NOT_FOUND") {
+      return "The requested organization was not found or you do not have an active membership in it.";
+    }
+    if (err.code === "INACTIVE_MEMBERSHIP") {
+      return "Your membership in the requested organization is inactive or disabled.";
+    }
+    if (err.code === "UNAUTHORIZED_ROLE") {
+      return "Your role does not have permission to modify the product catalog.";
+    }
+    if (err.code === "AUTH_REQUIRED") {
+      return "Authentication required. Please sign in.";
+    }
+    return err.message;
+  }
+
+  if (
+    err instanceof CatalogValidationError ||
+    err instanceof ProductNotFoundError ||
+    err instanceof CategoryNotFoundError ||
+    err instanceof VariantNotFoundError ||
+    err instanceof CrossTenantViolationError
+  ) {
+    return err.message;
+  }
+
+  if (err instanceof Error) {
+    if (
+      err.message.startsWith("Unauthorized:") ||
+      err.message.startsWith("Multi-tenant violation:") ||
+      err.message.includes("does not exist in this organization")
+    ) {
+      return err.message;
+    }
+  }
+
+  return fallbackMessage;
+}
+
 export async function createCategoryAction(
   _prevState: CatalogActionResult | null,
-  formData: FormData
+  formData: FormData,
+  options?: CatalogActionOptions
 ): Promise<CatalogActionResult> {
   const name = formData.get("name")?.toString() || "";
   const description = formData.get("description")?.toString() || undefined;
@@ -28,20 +85,19 @@ export async function createCategoryAction(
       organizationId,
       name,
       description,
+      actorUser: options?.actorUser,
     });
     revalidatePath("/catalog");
     return { success: true, message: `Category "${name}" created successfully.` };
   } catch (err: unknown) {
-    if (err instanceof CatalogValidationError || err instanceof Error) {
-      return { error: err.message };
-    }
-    return { error: "Failed to create category." };
+    return { error: formatCatalogActionError(err, "Failed to create category.") };
   }
 }
 
 export async function createProductAction(
   _prevState: CatalogActionResult | null,
-  formData: FormData
+  formData: FormData,
+  options?: CatalogActionOptions
 ): Promise<CatalogActionResult> {
   const organizationId = formData.get("organizationId")?.toString() || undefined;
   const categoryId = formData.get("categoryId")?.toString() || null;
@@ -66,20 +122,19 @@ export async function createProductAction(
       unit,
       costPrice,
       sellingPrice,
+      actorUser: options?.actorUser,
     });
     revalidatePath("/catalog");
     return { success: true, message: `Product "${name}" created successfully.` };
   } catch (err: unknown) {
-    if (err instanceof CatalogValidationError || err instanceof Error) {
-      return { error: err.message };
-    }
-    return { error: "Failed to create product." };
+    return { error: formatCatalogActionError(err, "Failed to create product.") };
   }
 }
 
 export async function updateProductAction(
   _prevState: CatalogActionResult | null,
-  formData: FormData
+  formData: FormData,
+  options?: CatalogActionOptions
 ): Promise<CatalogActionResult> {
   const productId = formData.get("productId")?.toString() || "";
   const organizationId = formData.get("organizationId")?.toString() || undefined;
@@ -108,20 +163,19 @@ export async function updateProductAction(
       costPrice,
       sellingPrice,
       isActive,
+      actorUser: options?.actorUser,
     });
     revalidatePath("/catalog");
     return { success: true, message: "Product updated successfully." };
   } catch (err: unknown) {
-    if (err instanceof CatalogValidationError || err instanceof Error) {
-      return { error: err.message };
-    }
-    return { error: "Failed to update product." };
+    return { error: formatCatalogActionError(err, "Failed to update product.") };
   }
 }
 
 export async function createVariantAction(
   _prevState: CatalogActionResult | null,
-  formData: FormData
+  formData: FormData,
+  options?: CatalogActionOptions
 ): Promise<CatalogActionResult> {
   const productId = formData.get("productId")?.toString() || "";
   const organizationId = formData.get("organizationId")?.toString() || undefined;
@@ -140,13 +194,11 @@ export async function createVariantAction(
       barcode: barcode === "" ? null : barcode,
       costPrice: costPrice === "" ? null : costPrice,
       sellingPrice: sellingPrice === "" ? null : sellingPrice,
+      actorUser: options?.actorUser,
     });
     revalidatePath("/catalog");
     return { success: true, message: `Variant "${name}" added successfully.` };
   } catch (err: unknown) {
-    if (err instanceof CatalogValidationError || err instanceof Error) {
-      return { error: err.message };
-    }
-    return { error: "Failed to add variant." };
+    return { error: formatCatalogActionError(err, "Failed to add variant.") };
   }
 }
