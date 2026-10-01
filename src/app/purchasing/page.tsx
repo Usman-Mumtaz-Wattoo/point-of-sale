@@ -22,6 +22,8 @@ import {
   type PurchaseKPIs,
 } from "./types";
 
+import { resolveTenantContext, TenantContextError } from "@/lib/tenant-context";
+
 export const metadata = {
   title: "Purchasing & Vendor Operations — Point of Sale",
   description: "Manage purchase orders, suppliers, and incoming shipments.",
@@ -52,67 +54,148 @@ export default async function PurchasingPage(props: PurchasingPageProps) {
   const user = await requireAuth();
   const searchParams = await props.searchParams;
 
-  // Zero-organization handling
-  if (user.memberships.length === 0) {
-    return (
-      <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-        <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-          <div className="w-12 h-12 rounded-full bg-slate-900 text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-800">
-            🏢
-          </div>
-          <h1 className="text-xl font-bold text-white">No Business Found</h1>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
-            You must belong to an active organization to access the Purchasing management module.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/onboarding"
-              className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
-            >
-              Create Your Business &rarr;
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // Resolve requested or default active organization membership
   const requestedOrgId = searchParams.org;
-  const activeMembership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive) ||
-      user.memberships.find((m) => m.isActive) ||
-      user.memberships[0]
-    : user.memberships.find((m) => m.isActive) || user.memberships[0];
+  const allowedReadRoles = [
+    ...new Set([...PURCHASE_READ_ROLES, ...SUPPLIER_READ_ROLES]),
+  ];
 
-  const organization = activeMembership.organization;
-  const userRole = activeMembership.role.name as SystemRoleName;
+  let tenantContext;
+  try {
+    tenantContext = await resolveTenantContext(requestedOrgId, {
+      requireRoles: allowedReadRoles,
+      actorUser: user,
+    });
+  } catch (err: unknown) {
+    if (err instanceof TenantContextError) {
+      if (err.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+        const eligibleMemberships = user.memberships.filter(
+          (m) =>
+            m.isActive &&
+            m.organization.isActive &&
+            allowedReadRoles.includes(m.role.name as SystemRoleName)
+        );
 
-  // Role Gate: strictly enforce read roles
-  if (!PURCHASE_READ_ROLES.includes(userRole) && !SUPPLIER_READ_ROLES.includes(userRole)) {
-    return (
-      <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-        <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-          <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
-            🚫
-          </div>
-          <h1 className="text-xl font-bold text-white">Access Denied</h1>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
-            Your role (<strong className="text-slate-200">{userRole}</strong>) does not have
-            permission to view purchasing or supplier operations.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
-            >
-              &larr; Return to Dashboard
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-xl mx-auto bg-slate-950 border border-slate-800 rounded-xl p-8 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-xl border border-emerald-500/20">
+                  🏢
+                </div>
+                <h1 className="text-xl font-bold text-white">Select Business</h1>
+                <p className="text-sm text-slate-400">
+                  You have access to multiple businesses. Please choose which business purchasing operations to view.
+                </p>
+              </div>
+
+              <div className="divide-y divide-slate-800 border border-slate-800 rounded-lg overflow-hidden">
+                {eligibleMemberships.map((m) => (
+                  <Link
+                    key={m.organizationId}
+                    href={`/purchasing?org=${m.organizationId}`}
+                    className="flex items-center justify-between p-4 hover:bg-slate-900/60 transition-colors"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-white">{m.organization.name}</div>
+                      <div className="text-xs text-slate-400 capitalize">Role: {m.role.name.toLowerCase()}</div>
+                    </div>
+                    <span className="text-xs text-emerald-400 font-semibold">&rarr;</span>
+                  </Link>
+                ))}
+              </div>
+
+              <div className="text-center pt-2">
+                <Link
+                  href="/dashboard"
+                  className="text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                >
+                  &larr; Back to Dashboard
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "NO_ACTIVE_MEMBERSHIP") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-slate-900 text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-800">
+                🏢
+              </div>
+              <h1 className="text-xl font-bold text-white">No Active Business Found</h1>
+              <p className="text-sm text-slate-400 max-w-md mx-auto">
+                You must belong to an active organization to access the Purchasing management module.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
+                >
+                  Create Your Business &rarr;
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "MEMBERSHIP_NOT_FOUND" || err.code === "INACTIVE_MEMBERSHIP") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto text-xl border border-amber-500/20">
+                ⚠️
+              </div>
+              <h1 className="text-xl font-bold text-white">Organization Inaccessible</h1>
+              <p className="text-sm text-slate-400">
+                The requested organization could not be found or your membership in it is inactive.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/purchasing"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  &larr; Return to Purchasing
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "UNAUTHORIZED_ROLE") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
+                🚫
+              </div>
+              <h1 className="text-xl font-bold text-white">Access Denied</h1>
+              <p className="text-sm text-slate-400 max-w-md mx-auto">
+                Your role does not have permission to view purchasing or supplier operations.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  &larr; Return to Dashboard
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+    }
+
+    throw err;
   }
+
+  const organization = tenantContext.organization;
+  const userRole = tenantContext.role;
+  const activeMembership = user.memberships.find((m) => m.id === tenantContext.membershipId)!;
 
   const canMutateSuppliers = SUPPLIER_MUTATION_ROLES.includes(userRole);
   const canMutatePurchases = PURCHASE_MUTATION_ROLES.includes(userRole);

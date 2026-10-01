@@ -8,6 +8,11 @@ import {
   MembershipNotFoundError,
   UnauthorizedRoleError,
 } from "./memberships";
+import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+} from "./tenant-context";
 
 // ============================================================================
 // ROLE DEFINITIONS
@@ -72,7 +77,13 @@ export class PurchaseConflictError extends PurchaseError {
   }
 }
 
-export { CrossTenantViolationError, MembershipNotFoundError, UnauthorizedRoleError };
+export {
+  CrossTenantViolationError,
+  MembershipNotFoundError,
+  UnauthorizedRoleError,
+  TenantContextError,
+  AuthRequiredError,
+};
 
 // ============================================================================
 // CONTEXT RESOLUTION & TYPES
@@ -109,48 +120,24 @@ export async function resolveAuthorizedPurchaseContext(params?: {
   requireMutation?: boolean;
   actorUser?: AppUserContext | null;
 }): Promise<AuthorizedPurchaseContext> {
+  const allowedRoles = params?.requireMutation
+    ? PURCHASE_MUTATION_ROLES
+    : PURCHASE_READ_ROLES;
+
+  const tenantContext = await resolveTenantContext(params?.organizationId, {
+    requireRoles: allowedRoles,
+    actorUser: params?.actorUser,
+  });
+
   const user = params?.actorUser !== undefined ? params.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
-  }
-
-  const requestedOrgId = params?.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (params?.requireMutation) {
-    if (!PURCHASE_MUTATION_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to modify purchase orders. Required one of: ${PURCHASE_MUTATION_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
-  } else {
-    if (!PURCHASE_READ_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to view purchase orders. Required one of: ${PURCHASE_READ_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
+    throw new AuthRequiredError();
   }
 
   return {
     user,
-    organizationId: membership.organizationId,
-    role: roleName,
+    organizationId: tenantContext.organizationId,
+    role: tenantContext.role,
   };
 }
 

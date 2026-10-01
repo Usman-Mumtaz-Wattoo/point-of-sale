@@ -202,7 +202,7 @@ export function PurchasingView({ initialData }: PurchasingViewProps) {
               Role: {initialData.userRole}
             </span>
             <Link
-              href={`/dashboard`}
+              href={`/dashboard?org=${initialData.organizationId}`}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
             >
               &larr; Dashboard

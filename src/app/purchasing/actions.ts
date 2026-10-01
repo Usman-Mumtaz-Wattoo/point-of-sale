@@ -3,7 +3,7 @@
 import { Prisma, PurchaseStatus } from "@prisma/client";
 import { getCurrentAppUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
+import { type SystemRoleName } from "@/lib/roles";
 import {
   createSupplier,
   updateSupplier,
@@ -39,6 +39,7 @@ import {
   listPaymentsForPurchase,
   recordPurchasePayment,
   PAYMENT_MUTATION_ROLES,
+  PAYMENT_READ_ROLES,
   PurchasePaymentValidationError,
   PurchasePaymentOverpaymentError,
   PurchasePaymentStateError,
@@ -47,6 +48,7 @@ import {
   listPurchaseReturnsForPurchase,
   createPurchaseReturn,
   PURCHASE_RETURN_MUTATION_ROLES,
+  PURCHASE_RETURN_READ_ROLES,
   PurchaseReturnValidationError,
   PurchaseReturnNotFoundError,
   PurchaseReturnStateError,
@@ -59,6 +61,11 @@ import {
   MembershipNotFoundError,
   UnauthorizedRoleError,
 } from "@/lib/memberships";
+import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+} from "@/lib/tenant-context";
 import {
   type SerializedSupplier,
   type SupplierListResult,
@@ -119,66 +126,65 @@ async function verifyPurchasingContext(params: {
   requireReturnMutation?: boolean;
   actorUser?: AppUserContext | null;
 }): Promise<VerifiedPurchasingContext> {
+  let requiredRoles: readonly SystemRoleName[];
+  if (params.requireSupplierMutation) {
+    requiredRoles = SUPPLIER_MUTATION_ROLES;
+  } else if (params.requireReturnMutation) {
+    requiredRoles = PURCHASE_RETURN_MUTATION_ROLES;
+  } else if (params.requirePaymentMutation) {
+    requiredRoles = PAYMENT_MUTATION_ROLES;
+  } else if (params.requirePurchaseMutation) {
+    requiredRoles = PURCHASE_MUTATION_ROLES;
+  } else {
+    requiredRoles = [
+      ...new Set([
+        ...PURCHASE_READ_ROLES,
+        ...SUPPLIER_READ_ROLES,
+        ...PAYMENT_READ_ROLES,
+        ...PURCHASE_RETURN_READ_ROLES,
+      ]),
+    ];
+  }
+
+  const tenantContext = await resolveTenantContext(params.requestedOrgId, {
+    requireRoles: requiredRoles,
+    actorUser: params.actorUser,
+  });
+
   const user = params.actorUser !== undefined ? params.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
-  }
-
-  const requestedOrgId = params.requestedOrgId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const role = membership.role.name as SystemRoleName;
-
-  if (params.requireSupplierMutation) {
-    if (!SUPPLIER_MUTATION_ROLES.includes(role)) {
-      throw new UnauthorizedRoleError(
-        `Role "${role}" is not permitted to modify suppliers. Required one of: ${SUPPLIER_MUTATION_ROLES.join(", ")}.`
-      );
-    }
-  } else if (params.requireReturnMutation) {
-    if (!PURCHASE_RETURN_MUTATION_ROLES.includes(role)) {
-      throw new UnauthorizedRoleError(
-        `Role "${role}" is not permitted to create purchase returns. Required one of: ${PURCHASE_RETURN_MUTATION_ROLES.join(", ")}.`
-      );
-    }
-  } else if (params.requirePaymentMutation) {
-    if (!PAYMENT_MUTATION_ROLES.includes(role)) {
-      throw new UnauthorizedRoleError(
-        `Role "${role}" is not permitted to record purchase payments. Required one of: ${PAYMENT_MUTATION_ROLES.join(", ")}.`
-      );
-    }
-  } else if (params.requirePurchaseMutation) {
-    if (!PURCHASE_MUTATION_ROLES.includes(role)) {
-      throw new UnauthorizedRoleError(
-        `Role "${role}" is not permitted to modify purchase orders. Required one of: ${PURCHASE_MUTATION_ROLES.join(", ")}.`
-      );
-    }
-  } else {
-    if (!PURCHASE_READ_ROLES.includes(role) && !SUPPLIER_READ_ROLES.includes(role)) {
-      throw new UnauthorizedRoleError(
-        `Role "${role}" is not permitted to view purchasing data.`
-      );
-    }
+    throw new AuthRequiredError();
   }
 
   return {
     user,
-    organizationId: membership.organizationId,
-    role,
+    organizationId: tenantContext.organizationId,
+    role: tenantContext.role,
   };
 }
 
 function translatePurchasingError(error: unknown, fallbackMessage: string): string {
+  if (error instanceof TenantContextError) {
+    if (error.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+      return "Multiple organizations found. Please specify an organization context.";
+    }
+    if (error.code === "NO_ACTIVE_MEMBERSHIP") {
+      return "No active organization membership found for your account.";
+    }
+    if (error.code === "MEMBERSHIP_NOT_FOUND") {
+      return "The requested organization was not found or you do not have an active membership in it.";
+    }
+    if (error.code === "INACTIVE_MEMBERSHIP") {
+      return "Your membership in the requested organization is inactive or disabled.";
+    }
+    if (error.code === "UNAUTHORIZED_ROLE") {
+      return "Your role does not have permission to perform this purchasing operation.";
+    }
+    if (error.code === "AUTH_REQUIRED") {
+      return "Authentication required. Please sign in.";
+    }
+    return error.message;
+  }
   if (error instanceof SupplierDuplicateError) {
     return error.message;
   }
@@ -259,13 +265,25 @@ export async function listSuppliersAction(options?: {
   return serializeData<SupplierListResult>(result);
 }
 
+export interface PurchasingActionOptions {
+  organizationId?: string;
+  actorUser?: AppUserContext | null;
+}
+
 export async function createSupplierAction(
   input: CreateSupplierInputDTO,
-  options?: { organizationId?: string }
+  optionsOrOrgId?: PurchasingActionOptions | string,
+  extraOptions?: PurchasingActionOptions
 ): Promise<SupplierActionResult> {
+  const opts: PurchasingActionOptions =
+    typeof optionsOrOrgId === "string"
+      ? { organizationId: optionsOrOrgId, ...extraOptions }
+      : { ...optionsOrOrgId, ...extraOptions };
+
   try {
     const { user, organizationId } = await verifyPurchasingContext({
-      requestedOrgId: options?.organizationId,
+      requestedOrgId: opts.organizationId,
+      actorUser: opts.actorUser,
       requireSupplierMutation: true,
     });
 
@@ -331,7 +349,7 @@ export async function listPurchasesAction(
   filters: PurchaseListFilterParams,
   options?: { organizationId?: string }
 ): Promise<PurchaseListResult> {
-  const { user, organizationId, role } = await verifyPurchasingContext({
+  const { user, organizationId } = await verifyPurchasingContext({
     requestedOrgId: options?.organizationId,
     requireSupplierMutation: false,
   });
@@ -339,16 +357,13 @@ export async function listPurchasesAction(
   // Verify branch access if branchId filter is applied
   const branchId = filters.branchId?.trim() || undefined;
   if (branchId) {
-    if (role !== SYSTEM_ROLES.OWNER) {
-      const activeMembership = user.memberships.find(
-        (m) => m.organizationId === organizationId && m.isActive
-      );
-      const hasBranchAccess = activeMembership?.branchMemberships.some(
-        (bm) => bm.branchId === branchId && bm.branch.isActive
-      );
-      if (!hasBranchAccess) {
-        throw new UnauthorizedRoleError("You do not have access to the selected branch.");
-      }
+    const hasBranchAccess = await checkBranchAccess({
+      userId: user.id,
+      organizationId,
+      branchId,
+    });
+    if (!hasBranchAccess) {
+      throw new UnauthorizedRoleError("You do not have access to the selected branch.");
     }
   }
 
