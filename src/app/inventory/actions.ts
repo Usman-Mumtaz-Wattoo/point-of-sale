@@ -1,9 +1,8 @@
 "use server";
 
 import { Prisma, type StockMovementType } from "@prisma/client";
-import { getCurrentAppUser } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { type SystemRoleName } from "@/lib/roles";
+import { db } from "@/lib/db";
 import {
   getInventorySummary,
   getBranchInventory,
@@ -13,8 +12,6 @@ import {
   recordStockOutflow,
   adjustStock,
   updateStockThresholds,
-  INVENTORY_READ_ROLES,
-  INVENTORY_MUTATION_ROLES,
   InventoryValidationError,
   InventoryNotFoundError,
   InventoryBranchAccessError,
@@ -24,10 +21,11 @@ import {
   CrossTenantViolationError,
   MembershipNotFoundError,
   BranchNotFoundError,
+  TenantContextError,
+  resolveAuthorizedInventoryContext,
   type AppUserContext,
   type InventoryServiceOptions,
 } from "@/lib/inventory";
-import { checkBranchAccess } from "@/lib/memberships";
 import {
   computeStockStatus,
   type InventorySummaryDTO,
@@ -63,6 +61,28 @@ function serializeData<T>(obj: unknown): T {
 }
 
 function translateInventoryError(error: unknown, fallbackMessage: string): string {
+  if (error instanceof TenantContextError) {
+    if (error.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+      return "Multiple organizations found. Please specify an organization context.";
+    }
+    if (error.code === "NO_ACTIVE_MEMBERSHIP") {
+      return "No active organization membership found for your account.";
+    }
+    if (error.code === "MEMBERSHIP_NOT_FOUND") {
+      return "The requested organization was not found or you do not have an active membership in it.";
+    }
+    if (error.code === "INACTIVE_MEMBERSHIP") {
+      return "Your membership in the requested organization is inactive or disabled.";
+    }
+    if (error.code === "UNAUTHORIZED_ROLE") {
+      return "Your role does not have permission to access or modify branch inventory.";
+    }
+    if (error.code === "AUTH_REQUIRED") {
+      return "Authentication required. Please sign in.";
+    }
+    return error.message;
+  }
+
   if (error instanceof InsufficientStockError) {
     return "Not enough stock available. The current stock may have changed. Refresh and try again.";
   }
@@ -102,64 +122,18 @@ async function verifyServerActionTenantContext(
   options?: InventoryServiceOptions,
   requireMutation = false
 ): Promise<VerifiedInventoryServerContext> {
-  const user = options?.actorUser !== undefined ? options.actorUser : await getCurrentAppUser();
-  if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
-  }
-
-  // Treat requestedOrgId or options.organizationId as untrusted candidate selector
-  const candidateOrgId = requestedOrgId?.trim() || options?.organizationId?.trim() || undefined;
-
-  const membership = candidateOrgId
-    ? user.memberships.find((m) => m.organizationId === candidateOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      candidateOrgId
-        ? `User does not have an active membership in organization "${candidateOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (requireMutation) {
-    if (!INVENTORY_MUTATION_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to mutate inventory. Required one of: ${INVENTORY_MUTATION_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
-  } else {
-    if (!INVENTORY_READ_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to view inventory. Required one of: ${INVENTORY_READ_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
-  }
-
-  // Verify branch access
-  const hasAccess = await checkBranchAccess({
-    userId: user.id,
-    organizationId: membership.organizationId,
+  const context = await resolveAuthorizedInventoryContext({
+    organizationId: requestedOrgId || options?.organizationId,
     branchId,
+    requireMutation,
+    actorUser: options?.actorUser,
   });
 
-  if (!hasAccess) {
-    throw new InventoryBranchAccessError(
-      `User does not have authorized access to branch "${branchId}".`
-    );
-  }
-
   return {
-    user,
-    organizationId: membership.organizationId,
-    role: roleName,
-    membership,
+    user: context.user,
+    organizationId: context.organizationId,
+    role: context.role,
+    membership: context.membership,
   };
 }
 

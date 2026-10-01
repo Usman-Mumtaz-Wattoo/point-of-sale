@@ -10,6 +10,11 @@ import {
   UnauthorizedRoleError,
   BranchNotFoundError,
 } from "./memberships";
+import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+} from "./tenant-context";
 
 // ============================================================================
 // ROLE ACCESS CONSTANTS
@@ -81,6 +86,8 @@ export {
   MembershipNotFoundError,
   UnauthorizedRoleError,
   BranchNotFoundError,
+  TenantContextError,
+  AuthRequiredError,
 };
 
 // ============================================================================
@@ -167,46 +174,48 @@ export async function resolveAuthorizedInventoryContext(params: {
   requireMutation?: boolean;
   actorUser?: AppUserContext | null;
 }) {
+  const allowedRoles = params.requireMutation
+    ? INVENTORY_MUTATION_ROLES
+    : INVENTORY_READ_ROLES;
+
+  const tenantContext = await resolveTenantContext(params.organizationId, {
+    requireRoles: allowedRoles,
+    actorUser: params.actorUser,
+  });
+
   const user = params.actorUser !== undefined ? params.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
+    throw new AuthRequiredError();
   }
 
-  const requestedOrgId = params.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
+  const organizationId = tenantContext.organizationId;
+  const roleName = tenantContext.role;
 
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const organizationId = membership.organizationId;
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (params.requireMutation) {
-    if (!INVENTORY_MUTATION_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to mutate inventory. Required one of: ${INVENTORY_MUTATION_ROLES.join(", ")}.`
+  let hasAccess = false;
+  if (params.actorUser) {
+    const mem = user.memberships.find((m) => m.organizationId === organizationId);
+    if (mem?.branchMemberships && mem.branchMemberships.length > 0) {
+      const match = mem.branchMemberships.find(
+        (bm) => bm.branchId === params.branchId && (bm.branch?.isActive !== false)
       );
-    }
-  } else {
-    if (!INVENTORY_READ_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to view inventory.`
-      );
+      if (match) {
+        if (match.branch?.organizationId && match.branch.organizationId !== organizationId) {
+          throw new CrossTenantViolationError(
+            `Multi-tenant violation: Branch "${params.branchId}" belongs to another organization.`
+          );
+        }
+        hasAccess = true;
+      }
     }
   }
 
-  const hasAccess = await checkBranchAccess({
-    userId: user.id,
-    organizationId,
-    branchId: params.branchId,
-  });
+  if (!hasAccess) {
+    hasAccess = await checkBranchAccess({
+      userId: user.id,
+      organizationId,
+      branchId: params.branchId,
+    });
+  }
 
   if (!hasAccess) {
     const targetBranch = await db.branch.findUnique({
@@ -226,12 +235,17 @@ export async function resolveAuthorizedInventoryContext(params: {
     );
   }
 
+  const membership = user.memberships.find(
+    (m) => m.organizationId === organizationId
+  )!;
+
   return {
     user,
     membership,
     organizationId,
     branchId: params.branchId,
     role: roleName,
+    tenantContext,
   };
 }
 

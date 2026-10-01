@@ -788,7 +788,7 @@ export function InventoryView({
       {/* Navigation Footer */}
       <div className="flex items-center justify-between pt-2">
         <Link
-          href="/dashboard"
+          href={`/dashboard?org=${orgId}`}
           className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
         >
           &larr; Back to Dashboard

@@ -6,7 +6,8 @@ import {
   INVENTORY_READ_ROLES,
   INVENTORY_MUTATION_ROLES,
 } from "@/lib/inventory";
-import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
+import { resolveTenantContext, TenantContextError } from "@/lib/tenant-context";
+import { SYSTEM_ROLES } from "@/lib/roles";
 import { db } from "@/lib/db";
 import { InventoryView } from "./inventory-view";
 import {
@@ -33,67 +34,134 @@ export default async function InventoryPage(props: InventoryPageProps) {
   const user = await requireAuth();
   const searchParams = await props.searchParams;
 
-  if (user.memberships.length === 0) {
-    return (
-      <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-        <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-          <div className="w-12 h-12 rounded-full bg-slate-900 text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-800">
-            🏢
-          </div>
-          <h1 className="text-xl font-bold text-white">No Business Found</h1>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
-            You must belong to an active organization to access the Inventory management module.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/onboarding"
-              className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
-            >
-              Create Your Business &rarr;
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
+  let tenantContext;
+  try {
+    tenantContext = await resolveTenantContext(searchParams.org, {
+      requireRoles: INVENTORY_READ_ROLES,
+      actorUser: user,
+    });
+  } catch (err: unknown) {
+    if (err instanceof TenantContextError) {
+      if (err.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+        const activeMemberships = user.memberships.filter(
+          (m) => m.isActive && m.organization && m.organization.isActive
+        );
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex items-center justify-center">
+            <div className="max-w-md w-full bg-slate-950 border border-slate-800 rounded-2xl p-8 space-y-6 shadow-xl text-center">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-xl border border-emerald-500/20">
+                🏢
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-xl font-bold text-white">Select Business</h1>
+                <p className="text-xs text-slate-400">
+                  You belong to multiple businesses. Please choose which inventory you wish to view.
+                </p>
+              </div>
+              <div className="space-y-2 text-left">
+                {activeMemberships.map((m) => (
+                  <Link
+                    key={m.id}
+                    href={`/inventory?org=${m.organizationId}`}
+                    className="block p-3 rounded-lg border border-slate-800 bg-slate-900/60 hover:bg-slate-800/80 hover:border-slate-700 transition-colors"
+                  >
+                    <div className="font-medium text-sm text-slate-200">{m.organization?.name}</div>
+                    <div className="text-xs text-slate-500 capitalize">{m.role.name.toLowerCase()}</div>
+                  </Link>
+                ))}
+              </div>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                  &larr; Return to Dashboard
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "NO_ACTIVE_MEMBERSHIP") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-slate-900 text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-800">
+                🏢
+              </div>
+              <h1 className="text-xl font-bold text-white">No Business Found</h1>
+              <p className="text-sm text-slate-400 max-w-md mx-auto">
+                You must belong to an active organization to access the Inventory management module.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
+                >
+                  Create Your Business &rarr;
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "MEMBERSHIP_NOT_FOUND" || err.code === "INACTIVE_MEMBERSHIP") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12 flex items-center justify-center">
+            <div className="max-w-md w-full text-center bg-slate-950 border border-slate-800 rounded-2xl p-8 space-y-4 shadow-xl">
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
+                ⚠️
+              </div>
+              <h1 className="text-xl font-bold text-white">Organization Inaccessible</h1>
+              <p className="text-sm text-slate-400">
+                The requested organization could not be found or your membership in it is inactive.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/inventory"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  &larr; Return to Inventory
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "UNAUTHORIZED_ROLE") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
+                🚫
+              </div>
+              <h1 className="text-xl font-bold text-white">Access Denied</h1>
+              <p className="text-sm text-slate-400 max-w-md mx-auto">
+                Your role does not have permission to view branch inventory.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  &larr; Return to Dashboard
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+    }
+
+    throw err;
   }
 
-  // Resolve requested or default active organization membership
-  const requestedOrgId = searchParams.org;
-  const activeMembership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive) ||
-      user.memberships.find((m) => m.isActive) ||
-      user.memberships[0]
-    : user.memberships.find((m) => m.isActive) || user.memberships[0];
-
-  const organization = activeMembership.organization;
-  const userRole = activeMembership.role.name as SystemRoleName;
-
-  // Strict server-side role gate: must be one of INVENTORY_READ_ROLES
-  if (!INVENTORY_READ_ROLES.includes(userRole)) {
-    return (
-      <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-        <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-          <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
-            🚫
-          </div>
-          <h1 className="text-xl font-bold text-white">Access Denied</h1>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
-            Your role (<strong className="text-slate-200">{userRole}</strong>) does not have
-            permission to view branch inventory.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
-            >
-              &larr; Return to Dashboard
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
+  const organization = tenantContext.organization;
+  const userRole = tenantContext.role;
+  const activeMembership = user.memberships.find((m) => m.id === tenantContext.membershipId)!;
   const canMutate = INVENTORY_MUTATION_ROLES.includes(userRole);
 
   // Resolve accessible active branches
@@ -132,7 +200,7 @@ export default async function InventoryPage(props: InventoryPageProps) {
           </p>
           <div className="pt-2">
             <Link
-              href="/dashboard"
+              href={`/dashboard?org=${organization.id}`}
               className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
             >
               &larr; Return to Dashboard
@@ -227,7 +295,7 @@ export default async function InventoryPage(props: InventoryPageProps) {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
-              href="/dashboard"
+              href={`/dashboard?org=${organization.id}`}
               className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
             >
               Dashboard
