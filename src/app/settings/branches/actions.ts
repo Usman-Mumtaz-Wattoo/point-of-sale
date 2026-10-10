@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
-import { getCurrentAppUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { SYSTEM_ROLES } from "@/lib/roles";
 import {
@@ -11,68 +10,38 @@ import {
   type UpdateBranchInput,
   type BranchActionResult,
 } from "./types";
+import {
+  resolveTenantContext,
+  TenantContextError,
+  type TenantUserContext,
+  type VerifiedTenantContext,
+} from "@/lib/tenant-context";
 
 /**
  * Resolves the authenticated user's organization context strictly enforcing
- * the OWNER role and multi-tenant isolation.
+ * the OWNER role and multi-tenant isolation via the shared tenant context resolver.
  *
  * Never silently defaults to the first organization if the user belongs to multiple organizations.
  */
-async function resolveOwnerBranchContext(requestedOrgId?: string): Promise<{
-  userId: string;
-  organizationId: string;
-  organizationName: string;
-}> {
-  const user = await getCurrentAppUser();
-  if (!user || !user.isActive) {
-    throw new Error("AUTH_REQUIRED");
-  }
-
-  // Filter verified active memberships with active organizations
-  const activeMemberships = user.memberships.filter(
-    (m) => m.isActive && m.organization && m.organization.isActive
-  );
-
-  if (activeMemberships.length === 0) {
-    throw new Error("NO_ACTIVE_MEMBERSHIP");
-  }
-
-  let selectedMembership = activeMemberships[0];
-
-  if (requestedOrgId?.trim()) {
-    const match = activeMemberships.find((m) => m.organizationId === requestedOrgId.trim());
-    if (!match) {
-      throw new Error("MEMBERSHIP_NOT_FOUND");
-    }
-    selectedMembership = match;
-  } else {
-    // If user belongs to multiple active organizations and none is specified, do NOT guess
-    if (activeMemberships.length > 1) {
-      throw new Error("MULTIPLE_ORGS_SPECIFY_REQUIRED");
-    }
-    selectedMembership = activeMemberships[0];
-  }
-
-  // Strictly enforce OWNER role for the selected organization
-  if (selectedMembership.role.name !== SYSTEM_ROLES.OWNER) {
-    throw new Error("OWNER_ROLE_REQUIRED");
-  }
-
-  return {
-    userId: user.id,
-    organizationId: selectedMembership.organizationId,
-    organizationName: selectedMembership.organization.name,
-  };
+export async function resolveOwnerBranchContext(
+  requestedOrgId?: string | null,
+  options?: { actorUser?: TenantUserContext | null }
+): Promise<VerifiedTenantContext> {
+  return resolveTenantContext(requestedOrgId, {
+    requireRoles: [SYSTEM_ROLES.OWNER],
+    actorUser: options?.actorUser,
+  });
 }
 
 /**
  * Lists all branches belonging to the verified active organization.
  */
 export async function listBranchesAction(
-  requestedOrgId?: string
+  requestedOrgId?: string,
+  options?: { actorUser?: TenantUserContext | null }
 ): Promise<BranchActionResult<BranchListItemDTO[]>> {
   try {
-    const { organizationId } = await resolveOwnerBranchContext(requestedOrgId);
+    const { organizationId } = await resolveOwnerBranchContext(requestedOrgId, options);
 
     const branches = await db.branch.findMany({
       where: { organizationId },
@@ -116,23 +85,30 @@ export async function listBranchesAction(
       data: serialized,
     };
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      if (error.message === "AUTH_REQUIRED") {
+    if (error instanceof TenantContextError || error instanceof Error) {
+      const code = error instanceof TenantContextError ? error.code : error.message;
+      if (code === "AUTH_REQUIRED") {
         return { success: false, error: "Authentication required to view branches." };
       }
-      if (error.message === "NO_ACTIVE_MEMBERSHIP") {
+      if (code === "NO_ACTIVE_MEMBERSHIP") {
         return { success: false, error: "No active business organization found." };
       }
-      if (error.message === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+      if (code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
         return {
           success: false,
           error: "Multiple organizations found. Please select an organization to manage its branches.",
         };
       }
-      if (error.message === "OWNER_ROLE_REQUIRED") {
+      if (code === "OWNER_ROLE_REQUIRED" || code === "UNAUTHORIZED_ROLE") {
         return {
           success: false,
           error: "Permission denied: Only the organization owner can manage branches.",
+        };
+      }
+      if (code === "MEMBERSHIP_NOT_FOUND" || code === "INACTIVE_MEMBERSHIP") {
+        return {
+          success: false,
+          error: "The requested organization could not be found or you do not have an active membership in it.",
         };
       }
     }
@@ -149,10 +125,11 @@ export async function listBranchesAction(
  */
 export async function createBranchAction(
   input: CreateBranchInput,
-  requestedOrgId?: string
+  requestedOrgId?: string,
+  options?: { actorUser?: TenantUserContext | null }
 ): Promise<BranchActionResult<BranchListItemDTO>> {
   try {
-    const { organizationId } = await resolveOwnerBranchContext(requestedOrgId);
+    const { organizationId } = await resolveOwnerBranchContext(requestedOrgId, options);
 
     const fieldErrors: Record<string, string> = {};
 
@@ -261,10 +238,14 @@ export async function createBranchAction(
       return { ...branch, settings, _count: { sales: 0, inventoryStocks: 0, memberships: 0 } };
     });
 
-    revalidatePath("/settings/branches");
-    revalidatePath("/settings");
-    revalidatePath("/dashboard");
-    revalidatePath("/pos");
+    try {
+      revalidatePath("/settings/branches");
+      revalidatePath("/settings");
+      revalidatePath("/dashboard");
+      revalidatePath("/pos");
+    } catch {
+      // Ignore outside Next.js request lifecycle
+    }
 
     const serialized: BranchListItemDTO = {
       id: newBranch.id,
@@ -302,15 +283,22 @@ export async function createBranchAction(
       };
     }
 
-    if (error instanceof Error) {
-      if (error.message === "AUTH_REQUIRED") {
+    if (error instanceof TenantContextError || error instanceof Error) {
+      const code = error instanceof TenantContextError ? error.code : error.message;
+      if (code === "AUTH_REQUIRED") {
         return { success: false, error: "Authentication required to create a branch." };
       }
-      if (error.message === "OWNER_ROLE_REQUIRED") {
+      if (code === "NO_ACTIVE_MEMBERSHIP") {
+        return { success: false, error: "No active business organization found." };
+      }
+      if (code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+        return { success: false, error: "Multiple organizations found. Please specify an organization." };
+      }
+      if (code === "OWNER_ROLE_REQUIRED" || code === "UNAUTHORIZED_ROLE") {
         return { success: false, error: "Permission denied: Only the organization owner can create branches." };
       }
-      if (error.message === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
-        return { success: false, error: "Multiple organizations found. Please specify an organization." };
+      if (code === "MEMBERSHIP_NOT_FOUND" || code === "INACTIVE_MEMBERSHIP") {
+        return { success: false, error: "The requested organization could not be found or you do not have an active membership in it." };
       }
     }
 
@@ -326,10 +314,11 @@ export async function createBranchAction(
  */
 export async function updateBranchAction(
   input: UpdateBranchInput,
-  requestedOrgId?: string
+  requestedOrgId?: string,
+  options?: { actorUser?: TenantUserContext | null }
 ): Promise<BranchActionResult<BranchListItemDTO>> {
   try {
-    const { organizationId } = await resolveOwnerBranchContext(requestedOrgId);
+    const { organizationId } = await resolveOwnerBranchContext(requestedOrgId, options);
 
     const branchId = input.branchId?.trim();
     if (!branchId) {
@@ -473,10 +462,14 @@ export async function updateBranchAction(
       return { ...branch, settings, _count: counts?._count };
     });
 
-    revalidatePath("/settings/branches");
-    revalidatePath("/settings");
-    revalidatePath("/dashboard");
-    revalidatePath("/pos");
+    try {
+      revalidatePath("/settings/branches");
+      revalidatePath("/settings");
+      revalidatePath("/dashboard");
+      revalidatePath("/pos");
+    } catch {
+      // Ignore outside Next.js request lifecycle
+    }
 
     const serialized: BranchListItemDTO = {
       id: updated.id,
@@ -514,12 +507,22 @@ export async function updateBranchAction(
       };
     }
 
-    if (error instanceof Error) {
-      if (error.message === "AUTH_REQUIRED") {
+    if (error instanceof TenantContextError || error instanceof Error) {
+      const code = error instanceof TenantContextError ? error.code : error.message;
+      if (code === "AUTH_REQUIRED") {
         return { success: false, error: "Authentication required to update a branch." };
       }
-      if (error.message === "OWNER_ROLE_REQUIRED") {
+      if (code === "NO_ACTIVE_MEMBERSHIP") {
+        return { success: false, error: "No active business organization found." };
+      }
+      if (code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+        return { success: false, error: "Multiple organizations found. Please specify an organization." };
+      }
+      if (code === "OWNER_ROLE_REQUIRED" || code === "UNAUTHORIZED_ROLE") {
         return { success: false, error: "Permission denied: Only the organization owner can edit branches." };
+      }
+      if (code === "MEMBERSHIP_NOT_FOUND" || code === "INACTIVE_MEMBERSHIP") {
+        return { success: false, error: "The requested organization could not be found or you do not have an active membership in it." };
       }
     }
 
@@ -537,10 +540,11 @@ export async function updateBranchAction(
  */
 export async function toggleBranchStatusAction(
   branchId: string,
-  requestedOrgId?: string
+  requestedOrgId?: string,
+  options?: { actorUser?: TenantUserContext | null }
 ): Promise<BranchActionResult<{ id: string; isActive: boolean }>> {
   try {
-    const { organizationId } = await resolveOwnerBranchContext(requestedOrgId);
+    const { organizationId } = await resolveOwnerBranchContext(requestedOrgId, options);
 
     if (!branchId?.trim()) {
       return { success: false, error: "Branch ID is required." };
@@ -587,10 +591,14 @@ export async function toggleBranchStatusAction(
       return updated;
     });
 
-    revalidatePath("/settings/branches");
-    revalidatePath("/settings");
-    revalidatePath("/dashboard");
-    revalidatePath("/pos");
+    try {
+      revalidatePath("/settings/branches");
+      revalidatePath("/settings");
+      revalidatePath("/dashboard");
+      revalidatePath("/pos");
+    } catch {
+      // Ignore outside Next.js request lifecycle
+    }
 
     const statusText = result.isActive ? "activated" : "deactivated";
 
@@ -600,21 +608,31 @@ export async function toggleBranchStatusAction(
       message: `Branch "${result.name}" has been ${statusText}.`,
     };
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      if (error.message === "BRANCH_NOT_FOUND") {
+    if (error instanceof TenantContextError || error instanceof Error) {
+      const code = error instanceof TenantContextError ? error.code : error.message;
+      if (code === "BRANCH_NOT_FOUND") {
         return { success: false, error: "Branch not found." };
       }
-      if (error.message === "CANNOT_DEACTIVATE_LAST_BRANCH") {
+      if (code === "CANNOT_DEACTIVATE_LAST_BRANCH") {
         return {
           success: false,
           error: "Cannot deactivate the only active branch. Your business must have at least one active branch to operate.",
         };
       }
-      if (error.message === "AUTH_REQUIRED") {
+      if (code === "AUTH_REQUIRED") {
         return { success: false, error: "Authentication required to change branch status." };
       }
-      if (error.message === "OWNER_ROLE_REQUIRED") {
+      if (code === "NO_ACTIVE_MEMBERSHIP") {
+        return { success: false, error: "No active business organization found." };
+      }
+      if (code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+        return { success: false, error: "Multiple organizations found. Please specify an organization." };
+      }
+      if (code === "OWNER_ROLE_REQUIRED" || code === "UNAUTHORIZED_ROLE") {
         return { success: false, error: "Permission denied: Only the organization owner can change branch status." };
+      }
+      if (code === "MEMBERSHIP_NOT_FOUND" || code === "INACTIVE_MEMBERSHIP") {
+        return { success: false, error: "The requested organization could not be found or you do not have an active membership in it." };
       }
     }
 
