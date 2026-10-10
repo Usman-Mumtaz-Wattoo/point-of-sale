@@ -28,6 +28,11 @@ import {
   CrossTenantViolationError,
   BranchNotFoundError,
 } from "@/lib/memberships";
+import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+} from "@/lib/tenant-context";
 import type {
   SerializedReturnableInfo,
   SerializedSaleReturnDetail,
@@ -73,72 +78,85 @@ export interface VerifiedServerActionContext {
 }
 
 /**
- * Validates the caller's server-side authentication session and active organization membership.
- *
- * SECURITY ENFORCEMENTS:
- * 1. Authenticated user is resolved strictly server-side (via session cookies / Supabase auth).
- *    Client input cannot spoof the user identity.
- * 2. If a requestedOrgId is supplied by the client (e.g. from an organization selector),
- *    the server verifies that the user possesses an ACTIVE membership in that organization.
- *    Client cannot access or mutate another tenant's data by guessing or supplying an arbitrary orgId.
- * 3. If requestedOrgId is omitted, defaults safely to the user's first active membership.
- * 4. Verifies role permissions:
- *    - Mutation actions require one of SALE_RETURN_MUTATION_ROLES (OWNER, MANAGER, CASHIER).
- *    - Read actions require one of SALE_RETURN_READ_ROLES (OWNER, MANAGER, CASHIER, ACCOUNTANT).
- * 5. Returns the verified organizationId derived directly from the verified membership,
- *    never trusting raw client values.
+ * Validates the caller's server-side authentication session and active organization membership
+ * via the shared tenant context resolver.
  */
 async function verifyServerActionTenantContext(
   requestedOrgId?: string,
   options?: SaleReturnServiceOptions,
   requireMutation: boolean = false
 ): Promise<VerifiedServerActionContext> {
-  const user = options?.actorUser !== undefined ? options.actorUser : await getCurrentAppUser();
-  if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
-  }
-
-  // Treat requestedOrgId or options.organizationId as candidate organization selector
   const candidateOrgId = requestedOrgId?.trim() || options?.organizationId?.trim() || undefined;
+  const allowedRoles = requireMutation ? SALE_RETURN_MUTATION_ROLES : SALE_RETURN_READ_ROLES;
 
-  const membership = candidateOrgId
-    ? user.memberships.find((m) => m.organizationId === candidateOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
+  const tenantContext = await resolveTenantContext(candidateOrgId, {
+    requireRoles: allowedRoles,
+    actorUser: options?.actorUser,
+  });
 
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      candidateOrgId
-        ? `User does not have an active membership in organization "${candidateOrgId}".`
-        : "User does not belong to any active organization."
-    );
+  const user = (options?.actorUser !== undefined ? options.actorUser : await getCurrentAppUser()) as AppUserContext;
+  if (!user) {
+    throw new AuthRequiredError();
   }
 
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (requireMutation) {
-    if (!SALE_RETURN_MUTATION_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to process sales returns. Required one of: ${SALE_RETURN_MUTATION_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
-  } else {
-    if (!SALE_RETURN_READ_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to view sales returns. Required one of: ${SALE_RETURN_READ_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
-  }
+  const membership =
+    user.memberships.find((m) => m.id === tenantContext.membershipId) ||
+    user.memberships.find((m) => m.organizationId === tenantContext.organizationId)!;
 
   return {
     user,
-    organizationId: membership.organizationId,
-    role: roleName,
+    organizationId: tenantContext.organizationId,
+    role: tenantContext.role,
     membership,
   };
+}
+
+function translateSaleReturnError(error: unknown, fallbackMessage: string): string {
+  if (error instanceof TenantContextError) {
+    if (error.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+      return "Multiple organizations found. Please specify an organization context.";
+    }
+    if (error.code === "NO_ACTIVE_MEMBERSHIP") {
+      return "No active organization membership found for your account.";
+    }
+    if (error.code === "MEMBERSHIP_NOT_FOUND") {
+      return "The requested organization was not found or you do not have an active membership in it.";
+    }
+    if (error.code === "INACTIVE_MEMBERSHIP") {
+      return "Your membership in the requested organization is inactive or disabled.";
+    }
+    if (error.code === "UNAUTHORIZED_ROLE") {
+      return "Your role does not have permission to perform this return operation.";
+    }
+    if (error.code === "AUTH_REQUIRED") {
+      return "Authentication required. Please sign in.";
+    }
+    return error.message;
+  }
+
+  if (
+    error instanceof SaleReturnValidationError ||
+    error instanceof SaleReturnNotFoundError ||
+    error instanceof SaleReturnBranchAccessError ||
+    error instanceof SaleReturnStateError ||
+    error instanceof SaleReturnDuplicateItemError ||
+    error instanceof SaleReturnQuantityExceededError ||
+    error instanceof SaleRefundCeilingExceededError ||
+    error instanceof SaleReturnIdempotencyConflictError ||
+    error instanceof UnauthorizedRoleError ||
+    error instanceof MembershipNotFoundError ||
+    error instanceof CrossTenantViolationError ||
+    error instanceof BranchNotFoundError
+  ) {
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  console.error("Sale return action error:", error);
+  return fallbackMessage;
 }
 
 // ============================================================================
@@ -174,22 +192,13 @@ export async function getSaleReturnableInfoAction(
       data: serializeData(info) as SerializedReturnableInfo,
     };
   } catch (err: unknown) {
-    if (
-      err instanceof SaleReturnNotFoundError ||
-      err instanceof SaleReturnBranchAccessError ||
-      err instanceof SaleReturnStateError ||
-      err instanceof SaleReturnValidationError ||
-      err instanceof UnauthorizedRoleError ||
-      err instanceof MembershipNotFoundError ||
-      err instanceof CrossTenantViolationError ||
-      err instanceof BranchNotFoundError
-    ) {
-      return { success: false, error: err.message };
-    }
-    if (err instanceof Error) {
-      return { success: false, error: err.message };
-    }
-    return { success: false, error: "An unexpected error occurred while looking up sale information." };
+    return {
+      success: false,
+      error: translateSaleReturnError(
+        err,
+        "An unexpected error occurred while looking up sale information."
+      ),
+    };
   }
 }
 
@@ -267,26 +276,13 @@ export async function createSaleReturnAction(
       message: `Return "${result.returnNumber}" processed successfully with refund of Rs. ${result.totalAmount.toString()}.`,
     };
   } catch (err: unknown) {
-    if (
-      err instanceof SaleReturnValidationError ||
-      err instanceof SaleReturnNotFoundError ||
-      err instanceof SaleReturnBranchAccessError ||
-      err instanceof SaleReturnStateError ||
-      err instanceof SaleReturnDuplicateItemError ||
-      err instanceof SaleReturnQuantityExceededError ||
-      err instanceof SaleRefundCeilingExceededError ||
-      err instanceof SaleReturnIdempotencyConflictError ||
-      err instanceof UnauthorizedRoleError ||
-      err instanceof MembershipNotFoundError ||
-      err instanceof CrossTenantViolationError ||
-      err instanceof BranchNotFoundError
-    ) {
-      return { success: false, error: err.message };
-    }
-    if (err instanceof Error) {
-      return { success: false, error: err.message };
-    }
-    return { success: false, error: "An unexpected error occurred while processing the sales return." };
+    return {
+      success: false,
+      error: translateSaleReturnError(
+        err,
+        "An unexpected error occurred while processing the sales return."
+      ),
+    };
   }
 }
 
@@ -319,20 +315,13 @@ export async function getSaleReturnByIdAction(
       data: serializeData(returnDetail) as SerializedSaleReturnDetail,
     };
   } catch (err: unknown) {
-    if (
-      err instanceof SaleReturnNotFoundError ||
-      err instanceof SaleReturnBranchAccessError ||
-      err instanceof UnauthorizedRoleError ||
-      err instanceof MembershipNotFoundError ||
-      err instanceof CrossTenantViolationError ||
-      err instanceof BranchNotFoundError
-    ) {
-      return { success: false, error: err.message };
-    }
-    if (err instanceof Error) {
-      return { success: false, error: err.message };
-    }
-    return { success: false, error: "An unexpected error occurred while retrieving return details." };
+    return {
+      success: false,
+      error: translateSaleReturnError(
+        err,
+        "An unexpected error occurred while retrieving return details."
+      ),
+    };
   }
 }
 
@@ -387,18 +376,12 @@ export async function listSaleReturnsAction(
       data: serializeData(listResult) as SerializedPaginatedReturns,
     };
   } catch (err: unknown) {
-    if (
-      err instanceof UnauthorizedRoleError ||
-      err instanceof SaleReturnBranchAccessError ||
-      err instanceof MembershipNotFoundError ||
-      err instanceof CrossTenantViolationError ||
-      err instanceof BranchNotFoundError
-    ) {
-      return { success: false, error: err.message };
-    }
-    if (err instanceof Error) {
-      return { success: false, error: err.message };
-    }
-    return { success: false, error: "An unexpected error occurred while fetching return history." };
+    return {
+      success: false,
+      error: translateSaleReturnError(
+        err,
+        "An unexpected error occurred while fetching return history."
+      ),
+    };
   }
 }

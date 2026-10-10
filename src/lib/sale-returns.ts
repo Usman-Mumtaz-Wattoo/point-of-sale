@@ -5,6 +5,11 @@ import { db } from "./db";
 import { SYSTEM_ROLES, type SystemRoleName } from "./roles";
 import { getCurrentAppUser } from "./auth";
 import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+} from "./tenant-context";
+import {
   checkBranchAccess,
   CrossTenantViolationError,
   MembershipNotFoundError,
@@ -110,6 +115,8 @@ export {
   MembershipNotFoundError,
   CrossTenantViolationError,
   InventoryBranchAccessError,
+  TenantContextError,
+  AuthRequiredError,
 };
 
 // ============================================================================
@@ -322,7 +329,8 @@ export interface AuthorizedReturnContext {
 // ============================================================================
 
 /**
- * Resolves and verifies the authenticated user's organization context and return permissions.
+ * Resolves and verifies the authenticated user's organization context and return permissions
+ * using the shared tenant context resolver.
  * Never trusts a client-supplied organizationId.
  */
 export async function resolveAuthorizedReturnContext(params?: {
@@ -330,48 +338,24 @@ export async function resolveAuthorizedReturnContext(params?: {
   requireMutation?: boolean;
   actorUser?: AppUserContext | null;
 }): Promise<AuthorizedReturnContext> {
-  const user = params?.actorUser !== undefined ? params.actorUser : await getCurrentAppUser();
+  const allowedRoles = params?.requireMutation
+    ? SALE_RETURN_MUTATION_ROLES
+    : SALE_RETURN_READ_ROLES;
+
+  const tenantContext = await resolveTenantContext(params?.organizationId, {
+    requireRoles: allowedRoles,
+    actorUser: params?.actorUser,
+  });
+
+  const user = (params?.actorUser !== undefined ? params.actorUser : await getCurrentAppUser()) as AppUserContext;
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
-  }
-
-  const requestedOrgId = params?.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (params?.requireMutation) {
-    if (!SALE_RETURN_MUTATION_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to create sales returns. Required one of: ${SALE_RETURN_MUTATION_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
-  } else {
-    if (!SALE_RETURN_READ_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to view sales returns. Required one of: ${SALE_RETURN_READ_ROLES.join(
-          ", "
-        )}.`
-      );
-    }
+    throw new AuthRequiredError();
   }
 
   return {
     user,
-    organizationId: membership.organizationId,
-    role: roleName,
+    organizationId: tenantContext.organizationId,
+    role: tenantContext.role,
   };
 }
 
