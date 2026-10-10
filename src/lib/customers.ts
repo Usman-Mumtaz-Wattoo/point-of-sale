@@ -10,6 +10,12 @@ import {
   UnauthorizedRoleError,
   BranchNotFoundError,
 } from "./memberships";
+import {
+  resolveTenantContext,
+  TenantContextError,
+  AuthRequiredError,
+  type TenantUserContext,
+} from "./tenant-context";
 
 // ============================================================================
 // ROLE ACCESS DEFINITIONS
@@ -78,6 +84,9 @@ export {
   MembershipNotFoundError,
   UnauthorizedRoleError,
   BranchNotFoundError,
+  TenantContextError,
+  AuthRequiredError,
+  resolveTenantContext,
 };
 
 // ============================================================================
@@ -102,11 +111,11 @@ export type AppUserContext = Prisma.UserGetPayload<{
 
 export interface CustomerServiceOptions {
   organizationId?: string;
-  actorUser?: AppUserContext | null;
+  actorUser?: AppUserContext | TenantUserContext | null;
 }
 
 export interface AuthorizedCustomerContext {
-  user: AppUserContext;
+  user: AppUserContext | TenantUserContext;
   organizationId: string;
   role: SystemRoleName;
 }
@@ -115,57 +124,34 @@ export type CustomerAction = "read" | "mutate" | "status";
 
 /**
  * Resolves the authenticated user, verifies organization membership,
- * and enforces the role permission gate for the requested customer action.
+ * and enforces the role permission gate for the requested customer action
+ * using the shared server-side tenant context resolver.
  */
 export async function resolveAuthorizedCustomerContext(
   action: CustomerAction,
   options?: CustomerServiceOptions
 ): Promise<AuthorizedCustomerContext> {
-  const user = options?.actorUser !== undefined ? options?.actorUser : await getCurrentAppUser();
+  const allowedRoles =
+    action === "mutate"
+      ? CUSTOMER_MUTATION_ROLES
+      : action === "status"
+      ? CUSTOMER_STATUS_ROLES
+      : CUSTOMER_READ_ROLES;
+
+  const tenantContext = await resolveTenantContext(options?.organizationId, {
+    requireRoles: allowedRoles,
+    actorUser: options?.actorUser,
+  });
+
+  const user = options?.actorUser !== undefined ? options.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
-  }
-
-  const requestedOrgId = options?.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (action === "mutate") {
-    if (!CUSTOMER_MUTATION_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to create or modify customers. Required one of: ${CUSTOMER_MUTATION_ROLES.join(", ")}.`
-      );
-    }
-  } else if (action === "status") {
-    if (!CUSTOMER_STATUS_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to activate or deactivate customers. Required one of: ${CUSTOMER_STATUS_ROLES.join(", ")}.`
-      );
-    }
-  } else {
-    // read / search
-    if (!CUSTOMER_READ_ROLES.includes(roleName)) {
-      throw new UnauthorizedRoleError(
-        `Role "${roleName}" is not permitted to view customers.`
-      );
-    }
+    throw new AuthRequiredError();
   }
 
   return {
     user,
-    organizationId: membership.organizationId,
-    role: roleName,
+    organizationId: tenantContext.organizationId,
+    role: tenantContext.role,
   };
 }
 

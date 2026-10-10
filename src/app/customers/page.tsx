@@ -8,6 +8,7 @@ import {
 } from "@/lib/customers";
 import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
 import { db } from "@/lib/db";
+import { resolveTenantContext, TenantContextError } from "@/lib/tenant-context";
 import { CustomerView } from "./customer-view";
 
 export const metadata = {
@@ -27,68 +28,143 @@ interface CustomersPageProps {
 export default async function CustomersPage(props: CustomersPageProps) {
   const user = await requireAuth();
   const searchParams = await props.searchParams;
-
-  if (user.memberships.length === 0) {
-    return (
-      <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-        <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-          <div className="w-12 h-12 rounded-full bg-slate-900 text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-800">
-            🏢
-          </div>
-          <h1 className="text-xl font-bold text-white">No Business Found</h1>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
-            You need to create or belong to an organization before accessing customer management.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/onboarding"
-              className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
-            >
-              Create Your Business &rarr;
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // Resolve requested or default active membership
   const requestedOrgId = searchParams.org;
-  const activeMembership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive) ||
-      user.memberships.find((m) => m.isActive) ||
-      user.memberships[0]
-    : user.memberships.find((m) => m.isActive) || user.memberships[0];
 
-  const organization = activeMembership.organization;
-  const userRole = activeMembership.role.name as SystemRoleName;
+  let tenantContext;
+  try {
+    tenantContext = await resolveTenantContext(requestedOrgId, {
+      requireRoles: CUSTOMER_READ_ROLES,
+      actorUser: user,
+    });
+  } catch (err: unknown) {
+    if (err instanceof TenantContextError) {
+      if (err.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+        const eligibleMemberships = user.memberships.filter(
+          (m) =>
+            m.isActive &&
+            m.organization.isActive &&
+            CUSTOMER_READ_ROLES.includes(m.role.name as SystemRoleName)
+        );
 
-  // Strict server-side role gate: INVENTORY_MANAGER or any role not in CUSTOMER_READ_ROLES is denied
-  if (!CUSTOMER_READ_ROLES.includes(userRole)) {
-    return (
-      <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-        <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-          <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
-            🚫
-          </div>
-          <h1 className="text-xl font-bold text-white">Access Denied</h1>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
-            Your role (<strong className="text-slate-200">{userRole}</strong>) does not have
-            permission to access Customer Management.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
-            >
-              &larr; Return to Dashboard
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-xl mx-auto bg-slate-950 border border-slate-800 rounded-xl p-8 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-xl border border-emerald-500/20">
+                  🏢
+                </div>
+                <h1 className="text-xl font-bold text-white">Select Business</h1>
+                <p className="text-sm text-slate-400">
+                  You have access to multiple businesses. Please choose which business customers to manage.
+                </p>
+              </div>
+
+              <div className="divide-y divide-slate-800 border border-slate-800 rounded-lg overflow-hidden">
+                {eligibleMemberships.map((m) => (
+                  <Link
+                    key={m.organizationId}
+                    href={`/customers?org=${m.organizationId}`}
+                    className="flex items-center justify-between p-4 hover:bg-slate-900/60 transition-colors"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-white">{m.organization.name}</div>
+                      <div className="text-xs text-slate-400 capitalize">Role: {m.role.name.toLowerCase()}</div>
+                    </div>
+                    <span className="text-xs text-emerald-400 font-semibold">&rarr;</span>
+                  </Link>
+                ))}
+              </div>
+
+              <div className="text-center pt-2">
+                <Link
+                  href="/dashboard"
+                  className="text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                >
+                  &larr; Back to Dashboard
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "NO_ACTIVE_MEMBERSHIP") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-slate-900 text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-800">
+                🏢
+              </div>
+              <h1 className="text-xl font-bold text-white">No Active Business Found</h1>
+              <p className="text-sm text-slate-400 max-w-md mx-auto">
+                You must belong to an active organization to access Customer Management.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
+                >
+                  Create Your Business &rarr;
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "MEMBERSHIP_NOT_FOUND" || err.code === "INACTIVE_MEMBERSHIP") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto text-xl border border-amber-500/20">
+                ⚠️
+              </div>
+              <h1 className="text-xl font-bold text-white">Business Unavailable</h1>
+              <p className="text-sm text-slate-400 max-w-md mx-auto">
+                {err.message}
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/customers"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  Choose Another Business
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      if (err.code === "UNAUTHORIZED_ROLE") {
+        return (
+          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
+            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
+                🚫
+              </div>
+              <h1 className="text-xl font-bold text-white">Access Denied</h1>
+              <p className="text-sm text-slate-400 max-w-md mx-auto">
+                Your role does not have permission to access Customer Management.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  &larr; Return to Dashboard
+                </Link>
+              </div>
+            </div>
+          </main>
+        );
+      }
+    }
+    throw err;
   }
 
+  const organization = tenantContext.organization;
+  const userRole = tenantContext.role;
   const canMutate = CUSTOMER_MUTATION_ROLES.includes(userRole);
   const canChangeStatus = CUSTOMER_STATUS_ROLES.includes(userRole);
 
@@ -105,13 +181,16 @@ export default async function CustomersPage(props: CustomersPageProps) {
 
   // Fetch accessible active branches for primary branch selector
   const isOwner = userRole === SYSTEM_ROLES.OWNER;
+  const currentMembership = user.memberships.find(
+    (m) => m.organizationId === tenantContext.organizationId
+  );
   const branches = isOwner
     ? await db.branch.findMany({
         where: { organizationId: organization.id, isActive: true },
         select: { id: true, name: true, code: true },
         orderBy: { name: "asc" },
       })
-    : activeMembership.branchMemberships
+    : (currentMembership?.branchMemberships ?? [])
         .filter((bm) => bm.branch.isActive)
         .map((bm) => ({
           id: bm.branch.id,
@@ -141,7 +220,7 @@ export default async function CustomersPage(props: CustomersPageProps) {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Link
-                href="/dashboard"
+                href={`/dashboard?org=${organization.id}`}
                 className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
               >
                 &larr; Dashboard

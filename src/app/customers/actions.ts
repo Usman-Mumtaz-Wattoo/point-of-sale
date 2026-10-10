@@ -13,6 +13,7 @@ import {
   CustomerDTO,
   CustomerSearchResultDTO,
   CustomerServiceOptions,
+  TenantContextError,
 } from "@/lib/customers";
 import {
   UnauthorizedRoleError,
@@ -33,6 +34,43 @@ function extractString(formData: FormData, key: string): string | null {
   if (value === null || value === undefined) return null;
   const str = value.toString().trim();
   return str.length > 0 ? str : null;
+}
+
+function translateCustomerError(err: unknown, fallbackMessage: string): string {
+  if (err instanceof TenantContextError) {
+    if (err.code === "MULTIPLE_ORGS_SPECIFY_REQUIRED") {
+      return "Multiple organizations found. Please specify an organization context.";
+    }
+    if (err.code === "NO_ACTIVE_MEMBERSHIP") {
+      return "No active organization membership found for your account.";
+    }
+    if (err.code === "MEMBERSHIP_NOT_FOUND") {
+      return "The requested organization was not found or you do not have an active membership in it.";
+    }
+    if (err.code === "INACTIVE_MEMBERSHIP") {
+      return "Your membership in the requested organization is inactive or disabled.";
+    }
+    if (err.code === "UNAUTHORIZED_ROLE") {
+      return "Your role does not have permission to perform this customer operation.";
+    }
+    return err.message;
+  }
+  if (
+    err instanceof CustomerValidationError ||
+    err instanceof CustomerConflictError ||
+    err instanceof CustomerBranchAccessError ||
+    err instanceof CustomerNotFoundError ||
+    err instanceof UnauthorizedRoleError ||
+    err instanceof MembershipNotFoundError ||
+    err instanceof CrossTenantViolationError ||
+    err instanceof BranchNotFoundError
+  ) {
+    return err.message;
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return fallbackMessage;
 }
 
 export async function createCustomerAction(
@@ -78,21 +116,7 @@ export async function createCustomerAction(
       customer,
     };
   } catch (err: unknown) {
-    if (
-      err instanceof CustomerValidationError ||
-      err instanceof CustomerConflictError ||
-      err instanceof CustomerBranchAccessError ||
-      err instanceof UnauthorizedRoleError ||
-      err instanceof MembershipNotFoundError ||
-      err instanceof CrossTenantViolationError ||
-      err instanceof BranchNotFoundError
-    ) {
-      return { error: err.message };
-    }
-    if (err instanceof Error) {
-      return { error: err.message };
-    }
-    return { error: "An unexpected error occurred while creating customer." };
+    return { error: translateCustomerError(err, "An unexpected error occurred while creating customer.") };
   }
 }
 
@@ -144,22 +168,7 @@ export async function updateCustomerAction(
       customer,
     };
   } catch (err: unknown) {
-    if (
-      err instanceof CustomerValidationError ||
-      err instanceof CustomerConflictError ||
-      err instanceof CustomerBranchAccessError ||
-      err instanceof CustomerNotFoundError ||
-      err instanceof UnauthorizedRoleError ||
-      err instanceof MembershipNotFoundError ||
-      err instanceof CrossTenantViolationError ||
-      err instanceof BranchNotFoundError
-    ) {
-      return { error: err.message };
-    }
-    if (err instanceof Error) {
-      return { error: err.message };
-    }
-    return { error: "An unexpected error occurred while updating customer." };
+    return { error: translateCustomerError(err, "An unexpected error occurred while updating customer.") };
   }
 }
 
@@ -174,9 +183,10 @@ export async function setCustomerActiveStatusAction(
   }
 
   try {
+    const candidateOrgId = options?.organizationId || organizationId || undefined;
     const customer = await setCustomerActiveStatus(customerId, isActive, {
       ...options,
-      organizationId: options?.organizationId || organizationId,
+      organizationId: candidateOrgId,
     });
     revalidatePath("/customers");
     return {
@@ -185,18 +195,7 @@ export async function setCustomerActiveStatusAction(
       customer,
     };
   } catch (err: unknown) {
-    if (
-      err instanceof CustomerValidationError ||
-      err instanceof CustomerNotFoundError ||
-      err instanceof UnauthorizedRoleError ||
-      err instanceof MembershipNotFoundError
-    ) {
-      return { error: err.message };
-    }
-    if (err instanceof Error) {
-      return { error: err.message };
-    }
-    return { error: `Failed to ${isActive ? "activate" : "deactivate"} customer.` };
+    return { error: translateCustomerError(err, `Failed to ${isActive ? "activate" : "deactivate"} customer.`) };
   }
 }
 
@@ -206,9 +205,10 @@ export async function searchCustomersAction(
   options?: CustomerServiceOptions
 ): Promise<CustomerSearchResultDTO[]> {
   try {
+    const candidateOrgId = options?.organizationId || organizationId || undefined;
     return await searchCustomers(query, {
       ...options,
-      organizationId: options?.organizationId || organizationId,
+      organizationId: candidateOrgId,
     });
   } catch (err) {
     console.error("searchCustomersAction error:", err);
