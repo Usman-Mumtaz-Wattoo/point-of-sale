@@ -371,7 +371,7 @@ export function SalesView({
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Link
-                href="/dashboard"
+                href={`/dashboard?org=${organizationId}`}
                 className="hover:text-emerald-400 transition-colors flex items-center gap-1"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />

@@ -1043,32 +1043,17 @@ export async function getSaleById(
   }
 
   // 1. Authenticate user and verify organization membership
+  const tenantContext = await resolveTenantContext(options?.organizationId, {
+    requireRoles: SALE_READ_ROLES,
+    actorUser: options?.actorUser,
+  });
+
   const user = options?.actorUser !== undefined ? options?.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
+    throw new AuthRequiredError();
   }
 
-  const requestedOrgId = options?.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const organizationId = membership.organizationId;
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (!SALE_READ_ROLES.includes(roleName)) {
-    throw new UnauthorizedRoleError(
-      `Role "${roleName}" is not permitted to view sales.`
-    );
-  }
+  const organizationId = tenantContext.organizationId;
 
   // 2. Fetch sale strictly within caller's organization (prevents cross-tenant existence leakage)
   const sale = await db.sale.findFirst({
@@ -1190,32 +1175,18 @@ export async function listSales(
   options?: SaleServiceOptions
 ): Promise<PaginatedSalesResult> {
   // 1. Authenticate user and verify organization membership
+  const tenantContext = await resolveTenantContext(options?.organizationId, {
+    requireRoles: SALE_READ_ROLES,
+    actorUser: options?.actorUser,
+  });
+
   const user = options?.actorUser !== undefined ? options?.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
+    throw new AuthRequiredError();
   }
 
-  const requestedOrgId = options?.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const organizationId = membership.organizationId;
-  const roleName = membership.role.name as SystemRoleName;
-
-  if (!SALE_READ_ROLES.includes(roleName)) {
-    throw new UnauthorizedRoleError(
-      `Role "${roleName}" is not permitted to view sales.`
-    );
-  }
+  const organizationId = tenantContext.organizationId;
+  const roleName = tenantContext.role;
 
   // 2. Resolve database-level branch scoping
   let branchFilterClause: Prisma.SaleWhereInput["branchId"] = undefined;
@@ -1252,7 +1223,9 @@ export async function listSales(
       // Owner has organization-wide access across all branches
       branchFilterClause = undefined;
     } else {
-      const authorizedBranchIds = membership.branchMemberships
+      const activeMembership = user.memberships.find((m) => m.id === tenantContext.membershipId) ||
+        user.memberships.find((m) => m.organizationId === tenantContext.organizationId);
+      const authorizedBranchIds = (activeMembership?.branchMemberships || [])
         .filter((bm) => bm.branch.isActive)
         .map((bm) => bm.branchId);
 
@@ -1470,34 +1443,18 @@ export async function voidSale(
     throw new SaleValidationError("saleId is required.");
   }
 
-  // 1. Authenticate user and verify organization membership
+  // 1. Authenticate user and verify organization membership & void role authorization
+  const tenantContext = await resolveTenantContext(options?.organizationId, {
+    requireRoles: SALE_VOID_ROLES,
+    actorUser: options?.actorUser,
+  });
+
   const user = options?.actorUser !== undefined ? options?.actorUser : await getCurrentAppUser();
   if (!user) {
-    throw new Error("Unauthorized: Authentication required.");
+    throw new AuthRequiredError();
   }
 
-  const requestedOrgId = options?.organizationId;
-  const membership = requestedOrgId
-    ? user.memberships.find((m) => m.organizationId === requestedOrgId && m.isActive)
-    : user.memberships.find((m) => m.isActive);
-
-  if (!membership) {
-    throw new MembershipNotFoundError(
-      requestedOrgId
-        ? `User has no active membership in organization "${requestedOrgId}".`
-        : "User does not belong to any active organization."
-    );
-  }
-
-  const organizationId = membership.organizationId;
-  const roleName = membership.role.name as SystemRoleName;
-
-  // 2. Strict authorization: Only OWNER and MANAGER may void sales
-  if (!SALE_VOID_ROLES.includes(roleName)) {
-    throw new UnauthorizedRoleError(
-      `Role "${roleName}" is not permitted to void sales. Required one of: ${SALE_VOID_ROLES.join(", ")}.`
-    );
-  }
+  const organizationId = tenantContext.organizationId;
 
   // 3. Atomic transaction with pessimistic row lock
   return await db.$transaction(
