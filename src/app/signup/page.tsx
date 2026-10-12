@@ -16,7 +16,7 @@ export default function SignupPage() {
 
   return (
     <AuthLayout
-      title="Register"
+      title="Sign Up"
       subtitle="Create an account for your business"
       footer={
         <p className="text-white/80">
