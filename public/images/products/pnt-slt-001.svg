@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="sltBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fff1f2"/>
+      <stop offset="100%" stop-color="#ffe4e6"/>
+    </radialGradient>
+    <linearGradient id="saltGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fda4af"/>
+      <stop offset="50%" stop-color="#f43f5e"/>
+      <stop offset="100%" stop-color="#e11d48"/>
+    </linearGradient>
+    <filter id="sltShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#sltBg)"/>
+  <ellipse cx="100" cy="168" rx="40" ry="9" fill="#be123c" opacity="0.18"/>
+  <g filter="url(#sltShadow)">
+    <!-- Grinder Top -->
+    <rect x="85" y="38" width="30" height="22" rx="4" fill="#334155"/>
+    <rect x="88" y="32" width="24" height="6" rx="2" fill="#64748b"/>
+    <!-- Glass Grinder Body -->
+    <path d="M85 60 L115 60 L122 155 C122 160, 116 164, 110 164 L90 164 C84 164, 78 160, 78 155 Z" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+    <!-- Himalayan Salt Crystals Inside -->
+    <path d="M82 90 L118 90 L120 155 C120 158, 116 160, 110 160 L90 160 C84 160, 80 158, 80 155 Z" fill="url(#saltGrad)"/>
+    <!-- Salt label badge -->
+    <rect x="86" y="105" width="28" height="28" rx="3" fill="#ffffff" opacity="0.9"/>
+    <text x="100" y="118" font-size="7" font-weight="900" fill="#be123c" text-anchor="middle" font-family="sans-serif">PINK</text>
+    <text x="100" y="127" font-size="6" font-weight="bold" fill="#334155" text-anchor="middle" font-family="sans-serif">SALT</text>
+  </g>
+</svg>

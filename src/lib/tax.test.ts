@@ -199,3 +199,21 @@ test("Thermal receipt output: generates correct receipt lines for FBR and PRA", 
   assert.equal(tb.totalAmount.toFixed(2), "1161.00");
   assert.equal(tb.paymentMethod, "CASH");
 });
+
+test("Currency formatting: formats PKR amounts with PKR prefix and 2 decimals", async () => {
+  const { formatMoney, getCurrencyLabel } = await import("./currency");
+  assert.equal(formatMoney(480, "PKR"), "PKR 480.00");
+  assert.equal(formatMoney("1250.5", "PKR"), "PKR 1,250.50");
+  assert.equal(formatMoney(0, "PKR"), "PKR 0.00");
+  assert.equal(formatMoney(null, "PKR"), "—");
+  assert.equal(getCurrencyLabel("PKR"), "PKR");
+  assert.equal(getCurrencyLabel("Unit Cost", "PKR"), "Unit Cost (PKR)");
+});
+
+test("Product images: maps SKU to local SVG asset with safe fallback", async () => {
+  const { getProductImagePath } = await import("./product-images");
+  assert.equal(getProductImagePath("PRD-APP-001"), "/images/products/prd-app-001.svg");
+  assert.equal(getProductImagePath("PRD-BAN-001"), "/images/products/prd-ban-001.svg");
+  assert.equal(getProductImagePath("UNKNOWN-SKU-999"), "/images/products/fallback-product.svg");
+  assert.equal(getProductImagePath(null), "/images/products/fallback-product.svg");
+});

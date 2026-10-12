@@ -162,6 +162,7 @@ export default async function CatalogPage(props: CatalogPageProps) {
       organizationId: organization.id,
       search: searchParams.search,
       categoryId: searchParams.category,
+      includeInactive: true,
       actorUser: user,
     }),
   ]);
@@ -181,6 +182,7 @@ export default async function CatalogPage(props: CatalogPageProps) {
       <CatalogView
         organizationId={organization.id}
         organizationName={organization.name}
+        currency={organization.currency || "PKR"}
         userRole={userRole}
         canMutate={canMutate}
         categories={categories}

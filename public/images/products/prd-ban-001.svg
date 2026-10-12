@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="banBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef9c3"/>
+      <stop offset="100%" stop-color="#fef08a"/>
+    </radialGradient>
+    <linearGradient id="bananaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#facc15"/>
+      <stop offset="70%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#ca8a04"/>
+    </linearGradient>
+    <filter id="banShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#banBg)"/>
+  <ellipse cx="100" cy="165" rx="60" ry="10" fill="#a16207" opacity="0.15"/>
+  <g filter="url(#banShadow)">
+    <!-- Banana 1 (back) -->
+    <path d="M45 135 C70 165, 140 160, 160 85 C150 82, 135 125, 60 120 Z" fill="#ca8a04" opacity="0.8"/>
+    <!-- Banana 2 (main) -->
+    <path d="M38 120 C55 155, 130 165, 165 75 C156 70, 118 135, 52 108 Z" fill="url(#bananaGrad)"/>
+    <path d="M38 120 C42 122, 48 118, 52 108" stroke="#65a30d" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <path d="M165 75 L172 70" stroke="#713f12" stroke-width="5" stroke-linecap="round"/>
+    <!-- Highlight -->
+    <path d="M60 130 C90 148, 135 135, 155 88" stroke="#fef08a" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.6"/>
+  </g>
+</svg>

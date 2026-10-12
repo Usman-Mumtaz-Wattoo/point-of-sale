@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="oilBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#f7fee7"/>
+      <stop offset="100%" stop-color="#ecfccb"/>
+    </radialGradient>
+    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#65a30d"/>
+      <stop offset="40%" stop-color="#84cc16"/>
+      <stop offset="80%" stop-color="#4d7c0f"/>
+      <stop offset="100%" stop-color="#365314"/>
+    </linearGradient>
+    <filter id="oilShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#oilBg)"/>
+  <ellipse cx="100" cy="168" rx="36" ry="8" fill="#365314" opacity="0.2"/>
+  <g filter="url(#oilShadow)">
+    <!-- Bottle Cap -->
+    <rect x="92" y="32" width="16" height="14" rx="3" fill="#ca8a04"/>
+    <!-- Bottle Neck -->
+    <path d="M94 46 L106 46 L108 72 L92 72 Z" fill="#65a30d"/>
+    <!-- Bottle Body -->
+    <rect x="76" y="72" width="48" height="92" rx="10" fill="url(#glassGrad)"/>
+    <!-- Label -->
+    <rect x="80" y="95" width="40" height="46" rx="4" fill="#fefce8"/>
+    <text x="100" y="112" font-size="8" font-weight="900" fill="#3f6212" text-anchor="middle" font-family="sans-serif">OLIVE</text>
+    <text x="100" y="122" font-size="7" font-weight="bold" fill="#65a30d" text-anchor="middle" font-family="sans-serif">EXTRA VIRGIN</text>
+    <!-- Glass Highlight -->
+    <line x1="82" y1="78" x2="82" y2="158" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+  </g>
+</svg>

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useTransition, useCallback } from "react";
 import { getInventoryHistoryAction } from "./actions";
 import { type ModalType } from "./inventory-modals";
+import { formatMoney } from "@/lib/currency";
 import type {
   AuthorizedBranchDTO,
   SerializedInventoryStock,
@@ -261,7 +262,7 @@ export function StockDetailDrawer({
                     <span className="text-slate-400">Selling Price:</span>
                     <span className="font-mono font-medium text-slate-200">
                       {effectiveSellingPrice !== null && effectiveSellingPrice !== undefined
-                        ? `$${Number(effectiveSellingPrice).toFixed(2)}`
+                        ? formatMoney(effectiveSellingPrice)
                         : "—"}
                     </span>
                   </div>
@@ -269,7 +270,7 @@ export function StockDetailDrawer({
                     <span className="text-slate-400">Cost Price:</span>
                     <span className="font-mono font-medium text-slate-200">
                       {effectiveCostPrice !== null && effectiveCostPrice !== undefined
-                        ? `$${Number(effectiveCostPrice).toFixed(2)}`
+                        ? formatMoney(effectiveCostPrice)
                         : "—"}
                     </span>
                   </div>

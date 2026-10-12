@@ -136,6 +136,197 @@ function formatActivityTime(isoString: string, timeZone: string): string {
   }
 }
 
+function RevenueTimeSeriesChart({
+  timeSeries,
+  currency,
+}: {
+  timeSeries: DashboardMetricsDTO["revenueTimeSeries"];
+  currency: string;
+}) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
+  const points = timeSeries || [];
+  const maxNet = Math.max(...points.map((p) => Number(p.netRevenue) || 0), 0);
+  const totalNet = points.reduce((acc, p) => acc + (Number(p.netRevenue) || 0), 0);
+  const totalOrders = points.reduce((acc, p) => acc + p.orderCount, 0);
+  const hasData = points.length > 0 && (totalNet > 0 || totalOrders > 0);
+
+  if (!hasData) {
+    return (
+      <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60 relative">
+        <div className="w-full h-36 sm:h-44 flex flex-col items-center justify-center text-center p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-dashed border-slate-200 dark:border-slate-800">
+          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-2">
+            <TrendingUp className="w-4 h-4 opacity-40" />
+          </div>
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+            No completed sales in this reporting interval
+          </span>
+          <span className="text-[11px] text-slate-400 mt-0.5 max-w-sm">
+            Completed retail transactions at the POS will generate real-time performance analytics here.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const padX = 25;
+  const padYTop = 20;
+  const padYBottom = 135;
+  const width = 600;
+  const usableWidth = width - padX * 2;
+  const usableHeight = padYBottom - padYTop;
+
+  const n = points.length;
+  const coords = points.map((p, i) => {
+    const x = n === 1 ? width / 2 : padX + (i / (n - 1)) * usableWidth;
+    const val = Number(p.netRevenue) || 0;
+    const y = maxNet > 0 ? padYBottom - (val / maxNet) * usableHeight : padYBottom;
+    return { x, y, p };
+  });
+
+  let pathD = "";
+  if (coords.length === 1) {
+    pathD = `M ${padX},${coords[0].y} L ${width - padX},${coords[0].y}`;
+  } else {
+    pathD = `M ${coords[0].x},${coords[0].y}`;
+    for (let i = 1; i < coords.length; i++) {
+      const prev = coords[i - 1];
+      const cur = coords[i];
+      const cp1x = prev.x + (cur.x - prev.x) / 2;
+      const cp1y = prev.y;
+      const cp2x = prev.x + (cur.x - prev.x) / 2;
+      const cp2y = cur.y;
+      pathD += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${cur.x},${cur.y}`;
+    }
+  }
+
+  const areaD =
+    coords.length === 1
+      ? `M ${padX},${coords[0].y} L ${width - padX},${coords[0].y} L ${width - padX},${padYBottom} L ${padX},${padYBottom} Z`
+      : `${pathD} L ${coords[coords.length - 1].x},${padYBottom} L ${coords[0].x},${padYBottom} Z`;
+
+  const activePoint = hoveredIdx !== null && coords[hoveredIdx] ? coords[hoveredIdx] : null;
+
+  return (
+    <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60 relative">
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${width} 160`}
+          className="w-full h-36 sm:h-44 overflow-visible"
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <linearGradient id="realEmeraldGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          {/* Horizontal Guideline lines */}
+          <line
+            x1="0"
+            y1={padYTop}
+            x2={width}
+            y2={padYTop}
+            stroke="currentColor"
+            className="text-slate-200/60 dark:text-slate-800/80"
+            strokeDasharray="4 4"
+          />
+          <line
+            x1="0"
+            y1={padYTop + usableHeight / 2}
+            x2={width}
+            y2={padYTop + usableHeight / 2}
+            stroke="currentColor"
+            className="text-slate-200/60 dark:text-slate-800/80"
+            strokeDasharray="4 4"
+          />
+          <line
+            x1="0"
+            y1={padYBottom}
+            x2={width}
+            y2={padYBottom}
+            stroke="currentColor"
+            className="text-slate-200/60 dark:text-slate-800/80"
+            strokeDasharray="4 4"
+          />
+
+          {/* Shaded Area */}
+          <path d={areaD} fill="url(#realEmeraldGradient)" />
+
+          {/* Trend Line */}
+          <path
+            d={pathD}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* Interactive Data Nodes */}
+          {coords.map((c, i) => {
+            const isHovered = hoveredIdx === i;
+            return (
+              <circle
+                key={i}
+                cx={c.x}
+                cy={c.y}
+                r={isHovered ? 6 : 4}
+                fill={isHovered ? "#059669" : "#10b981"}
+                stroke="#ffffff"
+                strokeWidth={isHovered ? 2.5 : 2}
+                className="transition-all cursor-pointer"
+                onMouseEnter={() => setHoveredIdx(i)}
+                onMouseLeave={() => setHoveredIdx(null)}
+              />
+            );
+          })}
+        </svg>
+
+        {/* Hover Tooltip */}
+        {activePoint && (
+          <div
+            className="absolute -top-12 z-20 pointer-events-none transform -translate-x-1/2 bg-slate-900 text-white px-3 py-1.5 rounded-lg shadow-xl text-xs border border-slate-700 whitespace-nowrap"
+            style={{
+              left: `${(activePoint.x / width) * 100}%`,
+            }}
+          >
+            <div className="font-semibold text-emerald-400">
+              {formatCurrencyAmount(activePoint.p.netRevenue, currency)}
+            </div>
+            <div className="text-[10px] text-slate-400 flex items-center gap-1.5">
+              <span>{activePoint.p.label}</span>
+              <span>•</span>
+              <span>
+                {activePoint.p.orderCount} order{activePoint.p.orderCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Axis markers & milestones */}
+      <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 mt-2">
+        <span>{points[0]?.label || "Start"}</span>
+        {points.length > 2 && (
+          <span className="text-slate-500">
+            {points[Math.floor(points.length / 2)]?.label}
+          </span>
+        )}
+        <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+          <span>{points[points.length - 1]?.label || "End"}</span>
+          {maxNet > 0 && (
+            <span className="text-[10px] text-slate-400 font-normal">
+              (Peak: {formatCurrencyAmount(maxNet.toFixed(2), currency)})
+            </span>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function DashboardView({
   initialData,
   userEmail,
@@ -556,52 +747,11 @@ export function DashboardView({
                 </p>
               </div>
 
-              {/* Dynamic SVG Area Curve Chart */}
-              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60 relative">
-                <svg
-                  viewBox="0 0 600 160"
-                  className="w-full h-36 sm:h-44 overflow-visible"
-                  preserveAspectRatio="none"
-                >
-                  <defs>
-                    <linearGradient id="emeraldGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Horizontal Guideline lines */}
-                  <line x1="0" y1="40" x2="600" y2="40" stroke="currentColor" className="text-slate-200/60 dark:text-slate-800/80" strokeDasharray="4 4" />
-                  <line x1="0" y1="90" x2="600" y2="90" stroke="currentColor" className="text-slate-200/60 dark:text-slate-800/80" strokeDasharray="4 4" />
-                  <line x1="0" y1="140" x2="600" y2="140" stroke="currentColor" className="text-slate-200/60 dark:text-slate-800/80" strokeDasharray="4 4" />
-
-                  {/* Shaded Area */}
-                  <path
-                    d="M 0,140 Q 75,120 150,95 T 300,70 T 450,45 T 600,20 L 600,160 L 0,160 Z"
-                    fill="url(#emeraldGradient)"
-                  />
-
-                  {/* Trend Line */}
-                  <path
-                    d="M 0,140 Q 75,120 150,95 T 300,70 T 450,45 T 600,20"
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                  />
-
-                  {/* Active highlight node */}
-                  <circle cx="450" cy="45" r="5" fill="#10b981" stroke="#ffffff" strokeWidth="2.5" />
-                  <circle cx="600" cy="20" r="5" fill="#10b981" stroke="#ffffff" strokeWidth="2.5" />
-                </svg>
-
-                {/* Micro trend badges */}
-                <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 mt-2">
-                  <span>Start of Period</span>
-                  <span>Mid Interval</span>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Current Pace</span>
-                </div>
-              </div>
+              {/* Data-driven Revenue Performance Time-Series Chart */}
+              <RevenueTimeSeriesChart
+                timeSeries={data.revenueTimeSeries}
+                currency={data.currency}
+              />
             </div>
 
             {/* Quick Metrics Stack */}

@@ -531,26 +531,25 @@ export async function searchCustomers(
 ): Promise<CustomerSearchResultDTO[]> {
   const { organizationId } = await resolveAuthorizedCustomerContext("read", options);
 
-  if (query === undefined || query === null) {
-    return [];
-  }
+  const trimmed = (query || "").trim();
 
-  const trimmed = query.trim();
-  if (trimmed.length < 2) {
-    return [];
-  }
+  const where: Prisma.CustomerWhereInput = {
+    organizationId,
+    isActive: true,
+    ...(trimmed.length > 0
+      ? {
+          OR: [
+            { name: { contains: trimmed, mode: "insensitive" } },
+            { phone: { contains: trimmed, mode: "insensitive" } },
+            { email: { contains: trimmed, mode: "insensitive" } },
+            { code: { contains: trimmed, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
 
   const rows = await db.customer.findMany({
-    where: {
-      organizationId,
-      isActive: true,
-      OR: [
-        { name: { contains: trimmed, mode: "insensitive" } },
-        { phone: { contains: trimmed, mode: "insensitive" } },
-        { email: { contains: trimmed, mode: "insensitive" } },
-        { code: { contains: trimmed, mode: "insensitive" } },
-      ],
-    },
+    where,
     select: {
       id: true,
       name: true,

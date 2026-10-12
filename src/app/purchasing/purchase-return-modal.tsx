@@ -8,6 +8,7 @@ import {
   type CreatePurchaseReturnActionResult,
 } from "./types";
 import { createPurchaseReturnAction } from "./actions";
+import { formatMoney } from "@/lib/currency";
 
 interface PurchaseReturnModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface PurchaseReturnModalProps {
   onSuccess: (message: string, returnNumber?: string) => void;
   purchase: SerializedPurchaseDetailDTO | null;
   organizationId: string;
+  currency?: string;
 }
 
 interface ItemReturnState {
@@ -35,6 +37,7 @@ interface ItemReturnState {
 
 interface PurchaseReturnModalContentProps {
   purchase: SerializedPurchaseDetailDTO;
+  currency?: string;
   onClose: () => void;
   onSuccess: (message: string, returnNumber?: string) => void;
 }
@@ -46,6 +49,7 @@ export function PurchaseReturnModal(props: PurchaseReturnModalProps) {
     <PurchaseReturnModalContent
       key={`${props.purchase.id}-${props.purchase.updatedAt}`}
       purchase={props.purchase}
+      currency={props.currency}
       onClose={props.onClose}
       onSuccess={props.onSuccess}
     />
@@ -63,6 +67,7 @@ const COMMON_RETURN_REASONS = [
 
 function PurchaseReturnModalContent({
   purchase,
+  currency = "PKR",
   onClose,
   onSuccess,
 }: PurchaseReturnModalContentProps) {
@@ -459,7 +464,7 @@ function PurchaseReturnModalContent({
                     <th className="py-2.5 px-2 text-right">Received</th>
                     <th className="py-2.5 px-2 text-right">Returned</th>
                     <th className="py-2.5 px-2 text-right">Returnable</th>
-                    <th className="py-2.5 px-2 text-right">Unit Cost</th>
+                    <th className="py-2.5 px-2 text-right">Unit Cost ({currency})</th>
                     <th className="py-2.5 px-3 w-32 sm:w-36 text-right">Qty to Return</th>
                     <th className="py-2.5 px-3 text-right">Estimated Value</th>
                   </tr>
@@ -499,7 +504,7 @@ function PurchaseReturnModalContent({
                           {it.remainingReturnable}
                         </td>
                         <td className="py-2.5 px-2 text-right font-mono text-slate-400">
-                          ${unitCostNum.toFixed(2)}
+                          {formatMoney(unitCostNum, currency)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           {isZeroReturnable ? (
@@ -528,7 +533,7 @@ function PurchaseReturnModalContent({
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-rose-400 font-medium">
-                          ${estimatedLineVal.toFixed(2)}
+                          {formatMoney(estimatedLineVal, currency)}
                         </td>
                       </tr>
                     );
@@ -565,7 +570,7 @@ function PurchaseReturnModalContent({
               <div>
                 <span className="block text-[10px] text-slate-500 uppercase tracking-wider">Estimated Return Value</span>
                 <span className="font-mono font-bold text-slate-200 text-sm">
-                  ${totalEstimatedReturnValue.toFixed(2)}
+                  {formatMoney(totalEstimatedReturnValue, currency)}
                 </span>
               </div>
             </div>

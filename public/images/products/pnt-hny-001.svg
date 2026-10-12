@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="hnyBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fefce8"/>
+      <stop offset="100%" stop-color="#fef08a"/>
+    </radialGradient>
+    <radialGradient id="honeyG" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fde047"/>
+      <stop offset="50%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#a16207"/>
+    </radialGradient>
+    <filter id="hnyShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#hnyBg)"/>
+  <ellipse cx="100" cy="168" rx="46" ry="10" fill="#713f12" opacity="0.2"/>
+  <g filter="url(#hnyShadow)">
+    <!-- Hexagonal jar lid -->
+    <path d="M80 48 L120 48 L126 58 L74 58 Z" fill="#d97706"/>
+    <rect x="72" y="58" width="56" height="8" rx="2" fill="#b45309"/>
+    <!-- Hexagon Honey Jar Body -->
+    <path d="M72 66 L128 66 L136 100 L134 150 C134 158, 126 162, 118 162 L82 162 C74 162, 66 158, 66 150 L64 100 Z" fill="url(#honeyG)"/>
+    <!-- Honey label -->
+    <rect x="78" y="98" width="44" height="34" rx="4" fill="#ffffff" opacity="0.95"/>
+    <text x="100" y="114" font-size="9" font-weight="900" fill="#92400e" text-anchor="middle" font-family="sans-serif">HONEY</text>
+    <text x="100" y="125" font-size="7" font-weight="bold" fill="#d97706" text-anchor="middle" font-family="sans-serif">PURE WILD</text>
+  </g>
+</svg>

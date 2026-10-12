@@ -8,12 +8,14 @@ import {
   type AuthorizedBranchDTO,
 } from "./types";
 import { listPurchasesAction } from "./actions";
+import { formatMoney } from "@/lib/currency";
 
 interface PurchaseListProps {
   initialPurchases: SerializedPurchaseListItem[];
   initialTotalCount: number;
   initialKpis: PurchaseKPIs;
   organizationId: string;
+  currency?: string;
   authorizedBranches: AuthorizedBranchDTO[];
   suppliers: { id: string; name: string }[];
   canMutatePurchases: boolean;
@@ -27,6 +29,7 @@ export function PurchaseList({
   initialTotalCount,
   initialKpis,
   organizationId,
+  currency = "PKR",
   authorizedBranches,
   suppliers,
   canMutatePurchases,
@@ -186,12 +189,6 @@ export function PurchaseList({
     }
   };
 
-  function formatMoney(amountStr: string) {
-    const num = parseFloat(amountStr);
-    if (isNaN(num)) return "$0.00";
-    return `$${num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  }
-
   function formatDate(dateStr: string) {
     try {
       const d = new Date(dateStr);
@@ -242,7 +239,7 @@ export function PurchaseList({
         <div className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 shadow-xs">
           <span className="text-xs font-medium text-amber-600 dark:text-amber-400 block mb-1">Total Outstanding</span>
           <span className="text-2xl font-bold text-amber-600 dark:text-amber-400 font-mono">
-            {formatMoney(kpis.totalOutstanding)}
+            {formatMoney(kpis.totalOutstanding, currency)}
           </span>
         </div>
       </div>
@@ -467,13 +464,13 @@ export function PurchaseList({
                       {po.itemCount}
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-slate-900 dark:text-white font-mono">
-                      {formatMoney(po.totalAmount)}
+                      {formatMoney(po.totalAmount, currency)}
                     </td>
                     <td className="px-4 py-3 text-right font-medium font-mono">
                       {parseFloat(po.balanceDue) > 0 ? (
-                        <span className="text-amber-600 dark:text-amber-400">{formatMoney(po.balanceDue)}</span>
+                        <span className="text-amber-600 dark:text-amber-400">{formatMoney(po.balanceDue, currency)}</span>
                       ) : (
-                        <span className="text-slate-400 dark:text-slate-500">$0.00</span>
+                        <span className="text-slate-400 dark:text-slate-500">{formatMoney(0, currency)}</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">

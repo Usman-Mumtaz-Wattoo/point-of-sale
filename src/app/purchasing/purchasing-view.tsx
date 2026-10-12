@@ -239,6 +239,7 @@ export function PurchasingView({ initialData }: PurchasingViewProps) {
             initialTotalCount={initialData.initialPurchases.totalCount}
             initialKpis={initialData.initialPurchases.kpis}
             organizationId={initialData.organizationId}
+            currency={initialData.currency || "PKR"}
             authorizedBranches={initialData.authorizedBranches}
             suppliers={initialData.allActiveSuppliersForFilter}
             canMutatePurchases={initialData.canMutatePurchases}
@@ -479,6 +480,7 @@ export function PurchasingView({ initialData }: PurchasingViewProps) {
           onSuccess={handlePurchaseModalSuccess}
           purchaseToEdit={purchaseToEdit}
           organizationId={initialData.organizationId}
+          currency={initialData.currency || "PKR"}
           authorizedBranches={initialData.authorizedBranches}
           suppliers={initialData.allActiveSuppliersForFilter}
         />
@@ -488,6 +490,7 @@ export function PurchasingView({ initialData }: PurchasingViewProps) {
           isOpen={isDetailDrawerOpen}
           purchaseId={selectedPurchaseId}
           organizationId={initialData.organizationId}
+          currency={initialData.currency || "PKR"}
           canMutatePurchases={initialData.canMutatePurchases}
           userRole={initialData.userRole}
           onClose={() => setIsDetailDrawerOpen(false)}

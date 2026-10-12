@@ -7,6 +7,7 @@ import {
   type RecordPurchasePaymentActionResult,
 } from "./types";
 import { recordPurchasePaymentAction } from "./actions";
+import { formatMoney, getCurrencyLabel } from "@/lib/currency";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface PaymentModalProps {
   onSuccess: (message: string) => void;
   purchase: SerializedPurchaseDetailDTO;
   organizationId: string;
+  currency?: string;
 }
 
 export function PaymentModal(props: PaymentModalProps) {
@@ -32,6 +34,7 @@ function PaymentModalContent({
   onSuccess,
   purchase,
   organizationId,
+  currency = "PKR",
 }: PaymentModalProps) {
   const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>(
     PurchasePaymentMethod.BANK_TRANSFER
@@ -177,7 +180,7 @@ function PaymentModalContent({
               Total Order
             </span>
             <span className="text-slate-200 font-mono font-bold text-sm">
-              ${totalAmountNum.toFixed(2)}
+              {formatMoney(totalAmountNum, currency)}
             </span>
           </div>
           <div>
@@ -185,7 +188,7 @@ function PaymentModalContent({
               Already Paid
             </span>
             <span className="text-emerald-400 font-mono font-bold text-sm">
-              ${paidAmountNum.toFixed(2)}
+              {formatMoney(paidAmountNum, currency)}
             </span>
           </div>
           <div className="border-l border-slate-800 pl-2">
@@ -193,7 +196,7 @@ function PaymentModalContent({
               Balance Due
             </span>
             <span className="text-amber-400 font-mono font-bold text-sm">
-              ${balanceDueNum.toFixed(2)}
+              {formatMoney(balanceDueNum, currency)}
             </span>
           </div>
         </div>
@@ -242,7 +245,7 @@ function PaymentModalContent({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label htmlFor="payment-amount-input" className="text-slate-300 font-semibold">
-                Payment Amount ($) <span className="text-rose-400">*</span>
+                Payment Amount ({getCurrencyLabel(currency)}) <span className="text-rose-400">*</span>
               </label>
               <button
                 type="button"
@@ -250,13 +253,13 @@ function PaymentModalContent({
                 disabled={isSubmitting || balanceDueNum <= 0}
                 className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/20 transition-colors disabled:opacity-40"
               >
-                Pay Full Balance (${balanceDueNum.toFixed(2)})
+                Pay Full Balance ({formatMoney(balanceDueNum, currency)})
               </button>
             </div>
 
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 font-mono text-sm pointer-events-none">
-                $
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 font-mono text-xs pointer-events-none">
+                {getCurrencyLabel(currency)}
               </span>
               <input
                 id="payment-amount-input"
@@ -266,7 +269,7 @@ function PaymentModalContent({
                 onChange={handleAmountChange}
                 disabled={isSubmitting}
                 placeholder={`0.00 (Max: ${balanceDueNum.toFixed(2)})`}
-                className={`w-full pl-7 pr-3 py-2 rounded-lg bg-slate-950 border font-mono text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-1 transition-colors ${
+                className={`w-full pl-12 pr-3 py-2 rounded-lg bg-slate-950 border font-mono text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-1 transition-colors ${
                   isOverpaying
                     ? "border-rose-500 focus:ring-rose-500"
                     : "border-slate-800 focus:border-emerald-500 focus:ring-emerald-500"
@@ -288,7 +291,7 @@ function PaymentModalContent({
                       : "text-slate-300"
                   }`}
                 >
-                  ${isOverpaying ? "Overpayment" : remainingAfterPayment.toFixed(2)}
+                  {isOverpaying ? "Overpayment" : formatMoney(remainingAfterPayment, currency)}
                 </span>
               </span>
               {enteredAmountNum > 0 && !isOverpaying && (

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="brdBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#fde68a"/>
+    </radialGradient>
+    <linearGradient id="crustG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#b45309"/>
+      <stop offset="100%" stop-color="#78350f"/>
+    </linearGradient>
+    <filter id="brdShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#brdBg)"/>
+  <ellipse cx="100" cy="165" rx="60" ry="12" fill="#78350f" opacity="0.2"/>
+  <g filter="url(#brdShadow)">
+    <!-- Loaf Slice Outline -->
+    <path d="M55 90 C45 65, 80 50, 100 55 C120 50, 155 65, 145 90 L145 150 C145 155, 140 160, 135 160 L65 160 C60 160, 55 155, 55 150 Z" fill="url(#crustG)"/>
+    <!-- Inner Crumb -->
+    <path d="M62 92 C55 72, 82 60, 100 63 C118 60, 145 72, 138 92 L138 148 C138 152, 134 154, 130 154 L70 154 C66 154, 62 152, 62 148 Z" fill="#fef3c7"/>
+    <!-- Multigrain Seeds -->
+    <circle cx="80" cy="85" r="2.5" fill="#78350f"/>
+    <circle cx="95" cy="80" r="2" fill="#92400e"/>
+    <circle cx="115" cy="85" r="2.5" fill="#78350f"/>
+    <circle cx="90" cy="115" r="2.5" fill="#92400e"/>
+    <circle cx="110" cy="120" r="2" fill="#78350f"/>
+    <circle cx="80" cy="135" r="2.5" fill="#78350f"/>
+    <circle cx="120" cy="135" r="2" fill="#92400e"/>
+  </g>
+</svg>

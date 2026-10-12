@@ -113,6 +113,15 @@ export interface DashboardActivityItem {
   amount: string | null;
 }
 
+export interface DashboardTimeSeriesPoint {
+  date: string;
+  label: string;
+  netRevenue: string;
+  grossRevenue: string;
+  refundAmount: string;
+  orderCount: number;
+}
+
 export interface DashboardMetricsDTO {
   organizationId: string;
   organizationName: string;
@@ -125,6 +134,7 @@ export interface DashboardMetricsDTO {
   salesMetrics: DashboardSalesMetrics | null; // null for INVENTORY_MANAGER
   returnsMetrics: DashboardReturnsMetrics | null; // null for INVENTORY_MANAGER
   netSalesRevenue: string | null; // grossRevenue - totalRefundedAmount (null for INVENTORY_MANAGER)
+  revenueTimeSeries?: DashboardTimeSeriesPoint[] | null; // Data-driven time-series for chart
   inventoryMetrics: DashboardInventoryMetrics;
   branchSummaries?: DashboardBranchSummary[]; // Multi-branch comparison for authorized roles
   stockAlerts: DashboardStockAlertsDTO;

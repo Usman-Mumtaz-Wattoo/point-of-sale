@@ -214,31 +214,40 @@ export default async function PosPage(props: PosPageProps) {
     );
   }
 
-  // Fetch active products with active variants
-  const products = await db.product.findMany({
-    where: { organizationId: organization.id, isActive: true },
-    select: {
-      id: true,
-      name: true,
-      sku: true,
-      sellingPrice: true,
-      variants: {
-        where: { isActive: true },
-        select: {
-          id: true,
-          name: true,
-          sku: true,
-          sellingPrice: true,
+  // Fetch active categories and active products with active variants
+  const [categories, products] = await Promise.all([
+    db.category.findMany({
+      where: { organizationId: organization.id, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    db.product.findMany({
+      where: { organizationId: organization.id, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        categoryId: true,
+        sellingPrice: true,
+        variants: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            sellingPrice: true,
+          },
         },
       },
-    },
-    orderBy: { name: "asc" },
-  });
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const formattedProducts = products.map((p) => ({
     id: p.id,
     name: p.name,
     sku: p.sku,
+    categoryId: p.categoryId,
     sellingPrice: p.sellingPrice.toString(),
     variants: p.variants.map((v) => ({
       id: v.id,
@@ -264,8 +273,10 @@ export default async function PosPage(props: PosPageProps) {
       <PosView
         organizationId={organization.id}
         organizationName={organization.name}
+        currency={organization.currency || "PKR"}
         userRole={userRole}
         branches={branches}
+        categories={categories}
         products={formattedProducts}
       />
     </AppShell>

@@ -202,3 +202,32 @@ export async function createVariantAction(
     return { error: formatCatalogActionError(err, "Failed to add variant.") };
   }
 }
+
+export async function toggleProductActiveAction(
+  productId: string,
+  isActive: boolean,
+  organizationId?: string,
+  options?: CatalogActionOptions
+): Promise<CatalogActionResult> {
+  try {
+    await updateProduct({
+      organizationId,
+      productId,
+      isActive,
+      actorUser: options?.actorUser,
+    });
+    revalidatePath("/catalog");
+    revalidatePath("/pos");
+    return {
+      success: true,
+      message: `Product ${isActive ? "activated" : "deactivated / discontinued"} successfully.`,
+    };
+  } catch (err: unknown) {
+    return {
+      error: formatCatalogActionError(
+        err,
+        `Failed to ${isActive ? "activate" : "deactivate"} product.`
+      ),
+    };
+  }
+}

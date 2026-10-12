@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="spnBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="100%" stop-color="#bbf7d0"/>
+    </radialGradient>
+    <linearGradient id="leafGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#15803d"/>
+    </linearGradient>
+    <filter id="spnShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#spnBg)"/>
+  <ellipse cx="100" cy="165" rx="55" ry="10" fill="#15803d" opacity="0.15"/>
+  <g filter="url(#spnShadow)">
+    <!-- Back leaves -->
+    <path d="M80 145 C50 110, 45 60, 85 45 C115 55, 105 105, 80 145 Z" fill="#16a34a"/>
+    <path d="M115 145 C145 110, 155 60, 115 45 C85 55, 95 105, 115 145 Z" fill="#15803d"/>
+    <!-- Center Leaf -->
+    <path d="M100 160 C65 115, 60 65, 100 40 C140 65, 135 115, 100 160 Z" fill="url(#leafGrad1)"/>
+    <!-- Veins -->
+    <path d="M100 160 L100 55 M100 130 C85 118, 75 110, 75 110 M100 120 C115 108, 125 100, 125 100 M100 95 C85 85, 78 80, 78 80 M100 85 C115 75, 122 70, 122 70" stroke="#86efac" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.75"/>
+  </g>
+</svg>

@@ -15,11 +15,13 @@ import { ReceivingModal } from "./receiving-modal";
 import { PaymentModal } from "./payment-modal";
 import { PurchaseReturnModal } from "./purchase-return-modal";
 import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
+import { formatMoney } from "@/lib/currency";
 
 interface PurchaseDetailDrawerProps {
   isOpen: boolean;
   purchaseId: string | null;
   organizationId: string;
+  currency?: string;
   canMutatePurchases: boolean;
   userRole?: SystemRoleName;
   onClose: () => void;
@@ -30,6 +32,7 @@ interface PurchaseDetailDrawerProps {
 function PurchaseDetailDrawerContent({
   purchaseId,
   organizationId,
+  currency = "PKR",
   canMutatePurchases,
   userRole,
   onClose,
@@ -38,6 +41,7 @@ function PurchaseDetailDrawerContent({
 }: {
   purchaseId: string;
   organizationId: string;
+  currency?: string;
   canMutatePurchases: boolean;
   userRole?: SystemRoleName;
   onClose: () => void;
@@ -325,13 +329,13 @@ function PurchaseDetailDrawerContent({
                 <div>
                   <span className="block text-[10px] text-slate-500 uppercase tracking-wider">Total Amount</span>
                   <span className="text-emerald-400 font-mono font-bold">
-                    ${parseFloat(purchase.totalAmount).toFixed(2)}
+                    {formatMoney(purchase.totalAmount, currency)}
                   </span>
                 </div>
                 <div>
                   <span className="block text-[10px] text-slate-500 uppercase tracking-wider">Balance Due</span>
                   <span className="text-slate-200 font-mono font-medium">
-                    ${parseFloat(purchase.balanceDue).toFixed(2)}
+                    {formatMoney(purchase.balanceDue, currency)}
                   </span>
                 </div>
               </div>
@@ -637,7 +641,7 @@ function PurchaseDetailDrawerContent({
                               <th className="px-3 py-2.5 text-right">Received</th>
                               <th className="px-3 py-2.5 text-right">Returned</th>
                               <th className="px-3 py-2.5 text-right">Remaining</th>
-                              <th className="px-3 py-2.5 text-right">Unit Cost</th>
+                              <th className="px-3 py-2.5 text-right">Unit Cost ({currency})</th>
                               <th className="px-3 py-2.5 text-right">Tax (%)</th>
                               <th className="px-3 py-2.5 text-right">Line Total</th>
                             </tr>
@@ -652,7 +656,7 @@ function PurchaseDetailDrawerContent({
                                       {item.variant.name}
                                     </div>
                                   )}
-                                  <div className="text-[10px] text-slate-400 font-mono">
+                                  <div className="text-[10px] text-slate-500 font-mono">
                                     SKU: {item.variant?.sku || item.product.sku} • {item.product.unit}
                                   </div>
                                 </td>
@@ -669,13 +673,13 @@ function PurchaseDetailDrawerContent({
                                   {parseFloat(item.remainingToReceive).toFixed(3)}
                                 </td>
                                 <td className="px-3 py-2.5 text-right font-mono text-slate-300">
-                                  ${parseFloat(item.unitCost).toFixed(2)}
+                                  {formatMoney(item.unitCost, currency)}
                                 </td>
                                 <td className="px-3 py-2.5 text-right font-mono text-slate-400">
                                   {parseFloat(item.taxRate).toFixed(2)}%
                                 </td>
                                 <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-100">
-                                  ${parseFloat(item.lineTotal).toFixed(2)}
+                                  {formatMoney(item.lineTotal, currency)}
                                 </td>
                               </tr>
                             ))}
@@ -694,25 +698,25 @@ function PurchaseDetailDrawerContent({
                           <div className="flex justify-between">
                             <span>Subtotal (Items):</span>
                             <span className="font-mono text-slate-200">
-                              ${parseFloat(purchase.subtotal).toFixed(2)}
+                              {formatMoney(purchase.subtotal, currency)}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span>Order Discount:</span>
                             <span className="font-mono text-rose-400">
-                              -${parseFloat(purchase.discountAmount).toFixed(2)}
+                              -{formatMoney(purchase.discountAmount, currency)}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span>Order Tax:</span>
                             <span className="font-mono text-slate-200">
-                              +${parseFloat(purchase.taxAmount).toFixed(2)}
+                              +{formatMoney(purchase.taxAmount, currency)}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span>Shipping Amount:</span>
                             <span className="font-mono text-slate-200">
-                              +${parseFloat(purchase.shippingAmount).toFixed(2)}
+                              +{formatMoney(purchase.shippingAmount, currency)}
                             </span>
                           </div>
                         </div>
@@ -721,13 +725,13 @@ function PurchaseDetailDrawerContent({
                           <div className="flex justify-between font-bold text-white text-sm">
                             <span>Grand Total:</span>
                             <span className="font-mono text-emerald-400">
-                              ${parseFloat(purchase.totalAmount).toFixed(2)}
+                              {formatMoney(purchase.totalAmount, currency)}
                             </span>
                           </div>
                           <div className="flex justify-between text-slate-400">
                             <span>Total Paid:</span>
                             <span className="font-mono text-slate-200">
-                              ${parseFloat(purchase.paidAmount).toFixed(2)}
+                              {formatMoney(purchase.paidAmount, currency)}
                             </span>
                           </div>
                           <div className="flex justify-between font-semibold pt-1 border-t border-slate-800">
@@ -737,7 +741,7 @@ function PurchaseDetailDrawerContent({
                                 parseFloat(purchase.balanceDue) > 0 ? "text-amber-400" : "text-emerald-400"
                               }`}
                             >
-                              ${parseFloat(purchase.balanceDue).toFixed(2)}
+                              {formatMoney(purchase.balanceDue, currency)}
                             </span>
                           </div>
                           {isPayableStatus && hasOutstandingBalance && canRecordPayments && (
@@ -865,7 +869,7 @@ function PurchaseDetailDrawerContent({
                                 </span>
                               </div>
                               <span className="font-mono font-bold text-emerald-400 text-sm">
-                                ${parseFloat(pmt.amount).toFixed(2)}
+                                {formatMoney(pmt.amount, currency)}
                               </span>
                             </div>
 
@@ -958,8 +962,8 @@ function PurchaseDetailDrawerContent({
                                       {ri.productName} {ri.variantName ? `(${ri.variantName})` : ""}
                                     </span>
                                     <span className="font-mono">
-                                      Returned: {parseFloat(ri.quantityReturned).toFixed(3)} • Total: $
-                                      {parseFloat(ri.lineTotal).toFixed(2)}
+                                      Returned: {parseFloat(ri.quantityReturned).toFixed(3)} • Total:{" "}
+                                      {formatMoney(ri.lineTotal, currency)}
                                     </span>
                                   </div>
                                 ))}
@@ -1088,6 +1092,7 @@ function PurchaseDetailDrawerContent({
           }}
           purchase={purchase}
           organizationId={organizationId}
+          currency={currency}
         />
       )}
 
@@ -1103,6 +1108,7 @@ function PurchaseDetailDrawerContent({
           }}
           purchase={purchase}
           organizationId={organizationId}
+          currency={currency}
         />
       )}
     </div>

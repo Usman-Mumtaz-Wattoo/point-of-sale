@@ -28,6 +28,7 @@ import {
   type DashboardStockAlertItem,
   type DashboardTopProductItem,
   type DashboardActivityItem,
+  type DashboardTimeSeriesPoint,
   DASHBOARD_ALLOWED_ROLES,
 } from "./types";
 
@@ -249,6 +250,218 @@ function computeDateBounds(
   const start = getUtcDateForTimezone(currYear, currMonth, currDay, 0, 0, 0, 0, timeZone);
   const end = getUtcDateForTimezone(currYear, currMonth, currDay, 23, 59, 59, 999, timeZone);
   return { startDate: start, endDate: end, resolvedPreset: "today" };
+}
+
+/**
+ * Aggregates database-recorded completed sales and processed customer refunds into
+ * sequential time-series intervals for the Revenue Performance Overview chart.
+ *
+ * Enforces:
+ * - Scoped to tenant organization and authorized branch
+ * - Uses organization's configured timezone for date boundaries
+ * - Net revenue = completed sales minus processed refunds
+ * - Excludes voided and draft sales
+ */
+function generateRevenueTimeSeries({
+  sales,
+  returns,
+  startDate,
+  endDate,
+  preset,
+  timezone,
+}: {
+  sales: { saleDate: Date; totalAmount: Prisma.Decimal }[];
+  returns: { returnDate: Date; refundedAmount: Prisma.Decimal }[];
+  startDate: Date | null;
+  endDate: Date | null;
+  preset: DashboardDatePreset;
+  timezone: string;
+}): DashboardTimeSeriesPoint[] {
+  if (preset === "all" && sales.length === 0 && returns.length === 0) {
+    return [];
+  }
+
+  const formatDateKey = (d: Date): string => {
+    try {
+      const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      return formatter.format(d);
+    } catch {
+      return d.toISOString().slice(0, 10);
+    }
+  };
+
+  const formatHourKey = (d: Date): number => {
+    try {
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        hour: "numeric",
+        hour12: false,
+      });
+      const parts = formatter.formatToParts(d);
+      const h = parts.find((p) => p.type === "hour");
+      return h ? parseInt(h.value, 10) : d.getUTCHours();
+    } catch {
+      return d.getUTCHours();
+    }
+  };
+
+  const formatShortDayLabel = (dateStr: string): string => {
+    try {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      return new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        month: "short",
+        day: "numeric",
+      }).format(date);
+    } catch {
+      return dateStr;
+    }
+  };
+
+  if (preset === "today" || preset === "yesterday") {
+    const buckets: {
+      hour: number;
+      label: string;
+      grossRevenue: Prisma.Decimal;
+      refundAmount: Prisma.Decimal;
+      orderCount: number;
+    }[] = [];
+
+    for (let h = 0; h < 24; h++) {
+      const hourStr = `${h.toString().padStart(2, "0")}:00`;
+      buckets.push({
+        hour: h,
+        label: hourStr,
+        grossRevenue: new Prisma.Decimal("0.00"),
+        refundAmount: new Prisma.Decimal("0.00"),
+        orderCount: 0,
+      });
+    }
+
+    for (const s of sales) {
+      const h = formatHourKey(s.saleDate);
+      if (h >= 0 && h < 24) {
+        buckets[h].grossRevenue = buckets[h].grossRevenue.plus(s.totalAmount);
+        buckets[h].orderCount += 1;
+      }
+    }
+
+    for (const r of returns) {
+      const h = formatHourKey(r.returnDate);
+      if (h >= 0 && h < 24) {
+        buckets[h].refundAmount = buckets[h].refundAmount.plus(r.refundedAmount);
+      }
+    }
+
+    return buckets.map((b) => {
+      const net = b.grossRevenue.minus(b.refundAmount);
+      return {
+        date: b.label,
+        label: b.label,
+        netRevenue: (net.greaterThan(0) ? net : new Prisma.Decimal("0.00")).toFixed(2),
+        grossRevenue: b.grossRevenue.toFixed(2),
+        refundAmount: b.refundAmount.toFixed(2),
+        orderCount: b.orderCount,
+      };
+    });
+  }
+
+  let effectiveStart: Date;
+  let effectiveEnd: Date;
+
+  if (startDate && endDate) {
+    effectiveStart = startDate;
+    effectiveEnd = endDate;
+  } else {
+    const allDates: number[] = [
+      ...sales.map((s) => s.saleDate.getTime()),
+      ...returns.map((r) => r.returnDate.getTime()),
+    ];
+    if (allDates.length === 0) {
+      return [];
+    }
+    effectiveStart = new Date(Math.min(...allDates));
+    effectiveEnd = new Date(Math.max(...allDates));
+  }
+
+  const dayBuckets = new Map<
+    string,
+    {
+      label: string;
+      grossRevenue: Prisma.Decimal;
+      refundAmount: Prisma.Decimal;
+      orderCount: number;
+    }
+  >();
+
+  const cur = new Date(effectiveStart.getTime());
+  const endKey = formatDateKey(effectiveEnd);
+  let safety = 0;
+  while (safety < 366) {
+    const key = formatDateKey(cur);
+    if (!dayBuckets.has(key)) {
+      dayBuckets.set(key, {
+        label: formatShortDayLabel(key),
+        grossRevenue: new Prisma.Decimal("0.00"),
+        refundAmount: new Prisma.Decimal("0.00"),
+        orderCount: 0,
+      });
+    }
+    if (key === endKey || cur > effectiveEnd) break;
+    cur.setUTCDate(cur.getUTCDate() + 1);
+    safety++;
+  }
+
+  for (const s of sales) {
+    const key = formatDateKey(s.saleDate);
+    let b = dayBuckets.get(key);
+    if (!b) {
+      b = {
+        label: formatShortDayLabel(key),
+        grossRevenue: new Prisma.Decimal("0.00"),
+        refundAmount: new Prisma.Decimal("0.00"),
+        orderCount: 0,
+      };
+      dayBuckets.set(key, b);
+    }
+    b.grossRevenue = b.grossRevenue.plus(s.totalAmount);
+    b.orderCount += 1;
+  }
+
+  for (const r of returns) {
+    const key = formatDateKey(r.returnDate);
+    let b = dayBuckets.get(key);
+    if (!b) {
+      b = {
+        label: formatShortDayLabel(key),
+        grossRevenue: new Prisma.Decimal("0.00"),
+        refundAmount: new Prisma.Decimal("0.00"),
+        orderCount: 0,
+      };
+      dayBuckets.set(key, b);
+    }
+    b.refundAmount = b.refundAmount.plus(r.refundedAmount);
+  }
+
+  const sortedKeys = Array.from(dayBuckets.keys()).sort();
+  return sortedKeys.map((k) => {
+    const b = dayBuckets.get(k)!;
+    const net = b.grossRevenue.minus(b.refundAmount);
+    return {
+      date: k,
+      label: b.label,
+      netRevenue: (net.greaterThan(0) ? net : new Prisma.Decimal("0.00")).toFixed(2),
+      grossRevenue: b.grossRevenue.toFixed(2),
+      refundAmount: b.refundAmount.toFixed(2),
+      orderCount: b.orderCount,
+    };
+  });
 }
 
 /**
@@ -501,6 +714,7 @@ export async function getDashboardMetricsAction(
       totalTrackedItems,
       topSaleItems,
       recentActivityRaw,
+      chartDataRaw,
     ] = await Promise.all([
       // Query 1: Sales Aggregate (excluded for INVENTORY_MANAGER)
       isInventoryManager
@@ -679,6 +893,28 @@ export async function getDashboardMetricsAction(
               take: 5,
             }),
           ]),
+
+      // Query 9: Chart Time-Series Data
+      isInventoryManager
+        ? Promise.resolve({ chartSales: [], chartReturns: [] })
+        : Promise.all([
+            db.sale.findMany({
+              where: salesWhere,
+              select: {
+                saleDate: true,
+                totalAmount: true,
+              },
+              orderBy: { saleDate: "asc" },
+            }),
+            db.saleReturn.findMany({
+              where: returnsWhere,
+              select: {
+                returnDate: true,
+                refundedAmount: true,
+              },
+              orderBy: { returnDate: "asc" },
+            }),
+          ]).then(([chartSales, chartReturns]) => ({ chartSales, chartReturns })),
     ]);
 
     // 6. Calculate inventory alert counts and item lists
@@ -1028,6 +1264,17 @@ export async function getDashboardMetricsAction(
       }
     }
 
+    const revenueTimeSeries = isInventoryManager
+      ? null
+      : generateRevenueTimeSeries({
+          sales: chartDataRaw.chartSales,
+          returns: chartDataRaw.chartReturns,
+          startDate,
+          endDate,
+          preset: resolvedPreset,
+          timezone,
+        });
+
     const payload: DashboardMetricsDTO = {
       organizationId,
       organizationName,
@@ -1044,6 +1291,7 @@ export async function getDashboardMetricsAction(
       salesMetrics: salesMetricsDTO,
       returnsMetrics: returnsMetricsDTO,
       netSalesRevenue: netSalesRevenueStr,
+      revenueTimeSeries,
       inventoryMetrics: {
         lowStockCount,
         outOfStockCount,

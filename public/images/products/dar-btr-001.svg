@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="btrBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fefce8"/>
+      <stop offset="100%" stop-color="#fef9c3"/>
+    </radialGradient>
+    <linearGradient id="butterGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047"/>
+      <stop offset="60%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#ca8a04"/>
+    </linearGradient>
+    <filter id="btrShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#btrBg)"/>
+  <ellipse cx="100" cy="165" rx="65" ry="12" fill="#ca8a04" opacity="0.2"/>
+  <g filter="url(#btrShadow)">
+    <!-- Parchment paper wrapper -->
+    <polygon points="40,150 160,150 170,160 30,160" fill="#fef3c7" opacity="0.9"/>
+    <!-- Butter Block Isometric/3D -->
+    <!-- Top Face -->
+    <polygon points="50,95 100,75 150,95 100,115" fill="#fef08a"/>
+    <!-- Left Face -->
+    <polygon points="50,95 100,115 100,148 50,128" fill="url(#butterGold)"/>
+    <!-- Right Face -->
+    <polygon points="100,115 150,95 150,128 100,148" fill="#ca8a04"/>
+    <!-- Brand Stamp -->
+    <text x="100" y="98" font-size="8" font-weight="900" fill="#a16207" text-anchor="middle" font-family="sans-serif">BUTTER</text>
+  </g>
+</svg>

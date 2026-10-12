@@ -141,6 +141,7 @@ export interface PurchasingPageInitialData {
   canMutatePurchases: boolean;
   organizationId: string;
   organizationName: string;
+  currency?: string;
   authorizedBranches: AuthorizedBranchDTO[];
   initialSuppliers: SupplierListResult;
   initialPurchases: PurchaseListResult;

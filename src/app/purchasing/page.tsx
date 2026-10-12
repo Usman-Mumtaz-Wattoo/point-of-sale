@@ -329,6 +329,7 @@ export default async function PurchasingPage(props: PurchasingPageProps) {
     canMutatePurchases,
     organizationId: organization.id,
     organizationName: organization.name,
+    currency: organization.currency || "PKR",
     authorizedBranches,
     initialSuppliers: {
       suppliers: serializeData<SerializedSupplier[]>(initialSuppliersRes.suppliers),

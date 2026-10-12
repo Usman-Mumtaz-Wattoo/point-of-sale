@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="ygtBg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#eff6ff"/>
+      <stop offset="100%" stop-color="#dbeafe"/>
+    </radialGradient>
+    <linearGradient id="tubGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <filter id="ygtShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#ygtBg)"/>
+  <ellipse cx="100" cy="168" rx="55" ry="12" fill="#1e40af" opacity="0.2"/>
+  <g filter="url(#ygtShadow)">
+    <!-- Tub Lid -->
+    <ellipse cx="100" cy="75" rx="52" ry="14" fill="#3b82f6"/>
+    <ellipse cx="100" cy="73" rx="48" ry="11" fill="#60a5fa"/>
+    <!-- Tub Body -->
+    <path d="M52 75 L62 148 C64 156, 76 162, 100 162 C124 162, 136 156, 138 148 L148 75 Z" fill="url(#tubGrad)"/>
+    <!-- White Greek Swirl / Label -->
+    <ellipse cx="100" cy="115" rx="36" ry="20" fill="#ffffff"/>
+    <text x="100" y="114" font-size="9" font-weight="900" fill="#1d4ed8" text-anchor="middle" font-family="sans-serif">GREEK</text>
+    <text x="100" y="125" font-size="7" font-weight="bold" fill="#64748b" text-anchor="middle" font-family="sans-serif">YOGURT</text>
+  </g>
+</svg>
