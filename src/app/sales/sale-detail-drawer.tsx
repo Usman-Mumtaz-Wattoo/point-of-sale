@@ -24,6 +24,7 @@ import Link from "next/link";
 import { getSaleDetailAction } from "./actions";
 import { SaleReceiptModal } from "./sale-receipt-modal";
 import { VoidSaleModal } from "./void-sale-modal";
+import { extractSavedSaleTaxBreakdown } from "@/lib/tax";
 import {
   type SerializedSaleDetail,
   type SerializedVoidSaleResult,
@@ -453,14 +454,27 @@ function SaleDetailDrawerContent({
                       </span>
                     </div>
                   )}
-                  {parseFloat(sale.taxAmount || "0") > 0 && (
-                    <div className="flex justify-between text-slate-400">
-                      <span>Tax:</span>
-                      <span className="font-mono text-slate-200">
-                        +{formatCurrency(sale.taxAmount, organizationCurrency)}
-                      </span>
-                    </div>
-                  )}
+                  {parseFloat(sale.taxAmount || "0") > 0 && (() => {
+                    const tb = extractSavedSaleTaxBreakdown(sale);
+                    return (
+                      <>
+                        <div className="flex justify-between text-slate-400">
+                          <span>FBR Sales Tax ({tb.fbrRate}%):</span>
+                          <span className="font-mono text-slate-200">
+                            +{formatCurrency(tb.fbrTaxAmount, organizationCurrency)}
+                          </span>
+                        </div>
+                        {tb.praFee > 0 && (
+                          <div className="flex justify-between text-slate-400">
+                            <span>PRA Invoice Fee:</span>
+                            <span className="font-mono text-slate-200">
+                              +{formatCurrency(tb.praFee, organizationCurrency)}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   <div className="flex justify-between pt-2 border-t border-slate-800 text-sm font-bold text-white">
                     <span>Total Amount:</span>
                     <span className={`font-mono ${isVoided ? "line-through text-rose-400" : "text-emerald-400"}`}>

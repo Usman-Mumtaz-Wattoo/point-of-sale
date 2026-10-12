@@ -22,17 +22,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-      if (stored === "light" || stored === "dark") {
-        setThemeState(stored);
-      } else {
+    const handle = requestAnimationFrame(() => {
+      try {
+        const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+        if (stored === "light" || stored === "dark") {
+          setThemeState(stored);
+        } else {
+          setThemeState("system");
+        }
+      } catch {
         setThemeState("system");
       }
-    } catch {
-      setThemeState("system");
-    }
-    setMounted(true);
+      setMounted(true);
+    });
+
+    return () => cancelAnimationFrame(handle);
   }, []);
 
   useEffect(() => {

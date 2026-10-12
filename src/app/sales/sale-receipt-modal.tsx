@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Printer, X, Receipt, AlertTriangle } from "lucide-react";
 import { type SerializedSaleDetail } from "./types";
+import { extractSavedSaleTaxBreakdown } from "@/lib/tax";
 
 interface SaleReceiptModalProps {
   isOpen: boolean;
@@ -13,7 +14,7 @@ interface SaleReceiptModalProps {
   onClose: () => void;
 }
 
-function formatCurrency(amount: string | number, currency = "USD"): string {
+function formatCurrency(amount: string | number, currency = "PKR"): string {
   const num = typeof amount === "number" ? amount : parseFloat(amount || "0");
   if (isNaN(num)) return `${currency} 0.00`;
   try {
@@ -50,7 +51,7 @@ export function SaleReceiptModal({
   isOpen,
   sale,
   organizationName,
-  currency = "USD",
+  currency = "PKR",
   timeZone = "UTC",
   onClose,
 }: SaleReceiptModalProps) {
@@ -75,6 +76,7 @@ export function SaleReceiptModal({
   }
 
   const isVoided = sale.status === "VOIDED";
+  const taxBreakdown = extractSavedSaleTaxBreakdown(sale);
 
   const handlePrint = () => {
     window.print();
@@ -85,20 +87,25 @@ export function SaleReceiptModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="sale-receipt-title"
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      {/* Scoped CSS for 80mm thermal receipt printing */}
+      {/* Strict Scoped CSS for 80mm thermal receipt printing */}
       <style>{`
         @media print {
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
           body * {
             visibility: hidden !important;
           }
-          #thermal-receipt-printable, #thermal-receipt-printable * {
+          #thermal-receipt-printable,
+          #thermal-receipt-printable * {
             visibility: visible !important;
           }
           #thermal-receipt-printable {
@@ -106,53 +113,73 @@ export function SaleReceiptModal({
             left: 0 !important;
             top: 0 !important;
             width: 80mm !important;
+            max-width: 80mm !important;
             margin: 0 !important;
-            padding: 8px !important;
-            background: white !important;
-            color: black !important;
+            padding: 5mm 4mm !important;
+            background: #ffffff !important;
+            color: #000000 !important;
             border: none !important;
             box-shadow: none !important;
+            border-radius: 0 !important;
+            font-size: 11px !important;
+            line-height: 1.3 !important;
+          }
+          .thermal-no-print {
+            display: none !important;
           }
         }
       `}</style>
 
+      {/* Centered Modal Container */}
       <div
         ref={modalRef}
-        className="bg-slate-950 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl my-8"
+        className="flex flex-col items-center max-w-sm w-full my-auto space-y-3"
       >
-        {/* Modal Top Bar */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        {/* Modal Controls Bar (Hidden during Print) */}
+        <div className="thermal-no-print flex items-center justify-between w-full px-2 py-1 text-white">
           <div className="flex items-center gap-2">
-            <Receipt className="w-5 h-5 text-emerald-400" />
-            <h2 id="sale-receipt-title" className="text-base font-bold text-white">
-              Sale Receipt Preview
-            </h2>
+            <Receipt className="w-4 h-4 text-emerald-400" />
+            <span id="sale-receipt-title" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+              Thermal Receipt Preview
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close receipt preview"
-            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              aria-label="Print receipt"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors cursor-pointer shadow-sm"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close receipt preview"
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* 80mm Thermal Receipt Content */}
+        {/* Real Thermal Receipt Paper: Always White Paper, Always Black Text */}
         <div
           id="thermal-receipt-printable"
-          className="bg-white text-black p-5 rounded-lg font-mono text-xs shadow-inner space-y-3.5 leading-tight print:p-0 print:shadow-none"
+          style={{ backgroundColor: "#ffffff", color: "#000000" }}
+          className="w-[320px] max-w-[320px] bg-white text-black font-mono text-xs shadow-2xl p-4 sm:p-5 rounded-xs space-y-2.5 leading-tight select-text border border-neutral-200"
         >
           {/* Header */}
-          <div className="text-center space-y-1">
-            <h3 className="font-extrabold text-base tracking-wider uppercase">
+          <div className="text-center space-y-0.5">
+            <h3 className="font-black text-sm tracking-widest uppercase">
               {organizationName}
             </h3>
-            <p className="text-[11px] text-gray-700">
+            <p className="text-[11px] font-semibold text-neutral-800">
               Branch: {sale.branch.name} ({sale.branch.code})
             </p>
             {sale.cashier && (
-              <p className="text-[10px] text-gray-600">
+              <p className="text-[10px] text-neutral-700">
                 Cashier: {sale.cashier.name}
               </p>
             )}
@@ -160,63 +187,69 @@ export function SaleReceiptModal({
 
           {/* Voided Alert Banner */}
           {isVoided && (
-            <div className="border-2 border-dashed border-red-600 bg-red-50 p-2 text-center my-2 rounded">
+            <div className="border border-dashed border-red-600 bg-red-50 p-1.5 text-center my-1">
               <div className="flex items-center justify-center gap-1 font-bold text-red-700 text-xs uppercase tracking-wide">
                 <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
                 <span>*** VOIDED TRANSACTION ***</span>
               </div>
               <p className="text-[9px] text-red-600 mt-0.5">
-                NOT VALID FOR REFUND, RETURN, OR EXCHANGE
+                NOT VALID FOR REFUND OR EXCHANGE
               </p>
             </div>
           )}
 
+          {/* Dashed Divider */}
+          <div className="border-t border-dashed border-black/80 my-1.5" />
+
           {/* Transaction Metadata */}
-          <div className="border-t border-b border-dashed border-gray-400 py-2 space-y-1 text-[11px]">
+          <div className="space-y-1 text-[11px]">
             <div className="flex justify-between">
-              <span className="text-gray-600">Invoice #:</span>
+              <span className="text-neutral-700 font-medium">Invoice #:</span>
               <span className="font-bold">{sale.invoiceNumber}</span>
             </div>
             {sale.receiptNumber && (
               <div className="flex justify-between">
-                <span className="text-gray-600">Receipt #:</span>
+                <span className="text-neutral-700 font-medium">Receipt #:</span>
                 <span>{sale.receiptNumber}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-gray-600">Date:</span>
+              <span className="text-neutral-700 font-medium">Date/Time:</span>
               <span>{formatDateTime(sale.saleDate, timeZone)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Customer:</span>
-              <span>
+              <span className="text-neutral-700 font-medium">Customer:</span>
+              <span className="font-medium">
                 {sale.customer ? sale.customer.name : "Walk-in Customer"}
               </span>
             </div>
             {sale.customer?.phone && (
               <div className="flex justify-between">
-                <span className="text-gray-600">Phone:</span>
+                <span className="text-neutral-700 font-medium">Customer Phone:</span>
                 <span>{sale.customer.phone}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-gray-600">Status:</span>
-              <span className={isVoided ? "font-bold text-red-600" : "font-semibold text-emerald-800"}>
+              <span className="text-neutral-700 font-medium">Status:</span>
+              <span className={isVoided ? "font-bold text-red-700" : "font-semibold"}>
                 {sale.status}
               </span>
             </div>
           </div>
 
-          {/* Line Items */}
-          <div className="space-y-1.5 pt-1">
-            <div className="flex justify-between text-[10px] font-bold uppercase border-b border-gray-300 pb-1 text-gray-700">
+          {/* Dashed Divider */}
+          <div className="border-t border-dashed border-black/80 my-1.5" />
+
+          {/* Product & Price Rows */}
+          <div>
+            <div className="flex justify-between text-[10px] font-bold uppercase pb-1 border-b border-black/40 mb-1">
               <span className="flex-1">Item</span>
-              <span className="w-12 text-center">Qty</span>
-              <span className="w-16 text-right">Price</span>
+              <span className="w-10 text-center">Qty</span>
+              <span className="w-14 text-right">Price</span>
               <span className="w-16 text-right">Total</span>
             </div>
 
-            <div className="space-y-1.5 max-h-56 overflow-y-auto divide-y divide-gray-100 print:max-h-none print:overflow-visible">
+            <div className="space-y-1 divide-y divide-black/10">
               {sale.items.map((item) => {
                 const qty = parseFloat(item.quantity) || 0;
                 const price = parseFloat(item.unitPrice) || 0;
@@ -226,13 +259,13 @@ export function SaleReceiptModal({
                 return (
                   <div key={item.id} className="pt-1 text-[11px]">
                     <div className="flex justify-between items-start gap-1">
-                      <span className="flex-1 font-medium break-words leading-tight">
+                      <span className="flex-1 font-semibold break-words leading-tight">
                         {item.productName}
                       </span>
-                      <span className="w-12 text-center font-mono">
+                      <span className="w-10 text-center font-mono">
                         {qty}
                       </span>
-                      <span className="w-16 text-right font-mono">
+                      <span className="w-14 text-right font-mono">
                         {price.toFixed(2)}
                       </span>
                       <span className="w-16 text-right font-bold font-mono">
@@ -240,12 +273,12 @@ export function SaleReceiptModal({
                       </span>
                     </div>
                     {itemDiscount > 0 && (
-                      <div className="text-[10px] text-gray-500 pl-2">
-                        Disc: -{itemDiscount.toFixed(2)}
+                      <div className="text-[10px] text-neutral-600 pl-2">
+                        Line Disc: -{itemDiscount.toFixed(2)}
                       </div>
                     )}
                     {item.quantityReturned && parseFloat(item.quantityReturned) > 0 && (
-                      <div className="text-[10px] text-amber-700 pl-2">
+                      <div className="text-[10px] text-red-700 pl-2">
                         Returned: {item.quantityReturned}
                       </div>
                     )}
@@ -255,48 +288,79 @@ export function SaleReceiptModal({
             </div>
           </div>
 
-          {/* Financial Totals */}
-          <div className="border-t border-dashed border-gray-400 pt-2 space-y-1 text-[11px]">
+          {/* Dashed Divider */}
+          <div className="border-t border-dashed border-black/80 my-1.5" />
+
+          {/* Aligned Financial Totals */}
+          <div className="space-y-1 text-[11px]">
             <div className="flex justify-between">
-              <span className="text-gray-600">Subtotal:</span>
+              <span className="text-neutral-700 font-medium">Subtotal:</span>
               <span className="font-mono">{formatCurrency(sale.subtotal, currency)}</span>
             </div>
-            {parseFloat(sale.discountAmount || "0") > 0 && (
-              <div className="flex justify-between text-gray-700">
-                <span>Discount:</span>
+
+            {taxBreakdown.discountAmount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-neutral-700 font-medium">Discounts:</span>
                 <span className="font-mono">
-                  -{formatCurrency(sale.discountAmount, currency)}
+                  -{formatCurrency(taxBreakdown.discountAmount, currency)}
                 </span>
               </div>
             )}
-            {parseFloat(sale.taxAmount || "0") > 0 && (
-              <div className="flex justify-between text-gray-700">
-                <span>Tax:</span>
-                <span className="font-mono">+{formatCurrency(sale.taxAmount, currency)}</span>
+
+            {/* FBR Sales Tax Row with Applicable Rate & Amount */}
+            <div className="flex justify-between">
+              <span className="text-neutral-700 font-medium">
+                FBR Sales Tax ({taxBreakdown.fbrRate}%):
+              </span>
+              <span className="font-mono font-medium">
+                +{formatCurrency(taxBreakdown.fbrTaxAmount, currency)}
+              </span>
+            </div>
+
+            {/* PRA Invoice Fee Row (PKR 1.00 per invoice) */}
+            {taxBreakdown.praFee > 0 && (
+              <div className="flex justify-between">
+                <span className="text-neutral-700 font-medium">
+                  PRA Invoice Fee:
+                </span>
+                <span className="font-mono font-medium">
+                  +{formatCurrency(taxBreakdown.praFee, currency)}
+                </span>
               </div>
             )}
-            <div className="flex justify-between text-sm font-extrabold border-t border-gray-300 pt-1">
+
+            {/* Total Divider */}
+            <div className="border-t border-double border-black/90 pt-1 mt-1 flex justify-between text-sm font-black">
               <span>TOTAL:</span>
-              <span className="font-mono">{formatCurrency(sale.totalAmount, currency)}</span>
+              <span className="font-mono">
+                {formatCurrency(sale.totalAmount, currency)}
+              </span>
             </div>
           </div>
 
-          {/* Payment & Settlement */}
-          <div className="border-t border-dashed border-gray-400 pt-2 space-y-1 text-[11px]">
-            <div className="flex justify-between font-medium">
-              <span className="text-gray-600">Paid Amount:</span>
-              <span className="font-mono">{formatCurrency(sale.paidAmount, currency)}</span>
+          {/* Dashed Divider */}
+          <div className="border-t border-dashed border-black/80 my-1.5" />
+
+          {/* Payment Method & Settlement */}
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between">
+              <span className="text-neutral-700 font-medium">Payment Method:</span>
+              <span className="font-bold">{taxBreakdown.paymentMethod}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-neutral-700 font-medium">Paid Amount:</span>
+              <span className="font-mono font-semibold">{formatCurrency(sale.paidAmount, currency)}</span>
             </div>
             {parseFloat(sale.changeAmount || "0") > 0 && (
-              <div className="flex justify-between text-gray-700">
-                <span>Change Given:</span>
+              <div className="flex justify-between">
+                <span className="text-neutral-700 font-medium">Change Given:</span>
                 <span className="font-mono">{formatCurrency(sale.changeAmount, currency)}</span>
               </div>
             )}
 
-            {sale.payments && sale.payments.length > 0 && (
-              <div className="pt-1 space-y-0.5">
-                <span className="text-[10px] uppercase font-bold text-gray-500">
+            {sale.payments && sale.payments.length > 1 && (
+              <div className="pt-1 space-y-0.5 border-t border-black/20">
+                <span className="text-[10px] uppercase font-bold text-neutral-600 block">
                   Payment Breakdown:
                 </span>
                 {sale.payments.map((p) => (
@@ -312,31 +376,37 @@ export function SaleReceiptModal({
             )}
           </div>
 
-          {/* Legal / POS Disclaimer Footer */}
-          <div className="border-t border-dashed border-gray-400 pt-3 text-center space-y-1 text-[9px] text-gray-500">
-            <p className="font-bold text-gray-700 uppercase">
-              Thank You For Your Business!
+          {/* Dashed Divider */}
+          <div className="border-t border-dashed border-black/80 my-1.5" />
+
+          {/* Receipt Footer */}
+          <div className="text-center space-y-1 pt-1 text-[10px] text-neutral-700">
+            <p className="font-extrabold uppercase tracking-wide">
+              *** THANK YOU FOR YOUR BUSINESS ***
             </p>
-            <p>
-              * POS Transaction Record. Official Tax Authority (FBR/PRA) integration is not active in this checkpoint.
+            <p className="text-[9px] text-neutral-600">
+              Tax Authority (FBR & PRA) Invoiced Transaction
+            </p>
+            <p className="text-[9px] font-mono tracking-widest text-neutral-500">
+              {sale.invoiceNumber}
             </p>
           </div>
         </div>
 
-        {/* Modal Actions */}
-        <div className="flex items-center gap-3 pt-2">
+        {/* Action Buttons Below Receipt (Hidden in Print) */}
+        <div className="thermal-no-print flex items-center justify-center gap-3 w-full pt-1">
           <button
             type="button"
             onClick={handlePrint}
-            className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            className="flex-1 max-w-[200px] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            <span>Print Receipt</span>
+            <span>Print Thermal Receipt</span>
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-800 transition-colors cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
           >
             Close
           </button>

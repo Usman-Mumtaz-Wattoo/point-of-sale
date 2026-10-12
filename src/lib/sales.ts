@@ -24,6 +24,7 @@ import {
   CustomerNotFoundError,
   CustomerValidationError,
 } from "./customers";
+import { resolveFbrTaxRate, PRA_INVOICE_FEE } from "./tax";
 
 // ============================================================================
 // ROLE ACCESS DEFINITIONS
@@ -712,14 +713,18 @@ export async function completeSale(
     inventoryKey: string;
   }
 
-  // Read tax configuration
+  // Read organization settings for invoice numbering
   const orgSettings = await db.organizationSettings.findUnique({
     where: { organizationId },
   });
-  const taxEnabled = orgSettings?.taxEnabled ?? false;
-  const defaultTaxRate = taxEnabled
-    ? new Prisma.Decimal(orgSettings?.defaultTaxRate ?? 0)
-    : new Prisma.Decimal("0.00");
+
+  // Authoritative FBR sales tax rate based on transaction payment method:
+  // - CASH: 16.00%
+  // - CARD: 8.00% (digital incentive, alternative NOT additive)
+  // - PRA fee: PKR 1.00 per finalized invoice
+  const primaryPayment = Array.isArray(input.payments) && input.payments.length > 0 ? input.payments[0] : null;
+  const primaryMethod = primaryPayment?.paymentMethod || SalePaymentMethod.CASH;
+  const { rate: fbrTaxRate } = resolveFbrTaxRate(primaryMethod);
 
   const preparedLines: PreparedSaleLine[] = [];
   let sumSubtotal = new Prisma.Decimal("0.00");
@@ -789,9 +794,10 @@ export async function completeSale(
     }
 
     const taxableAmount = lineSubtotal.minus(lineDiscount);
-    const lineTax = taxEnabled
-      ? taxableAmount.times(defaultTaxRate).dividedBy(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
-      : new Prisma.Decimal("0.00");
+    const lineTax = taxableAmount
+      .times(fbrTaxRate)
+      .dividedBy(100)
+      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
     const lineTotal = taxableAmount.plus(lineTax);
 
     sumSubtotal = sumSubtotal.add(lineSubtotal);
@@ -807,7 +813,7 @@ export async function completeSale(
       unitPrice,
       unitCost,
       discountAmount: lineDiscount,
-      taxRate: defaultTaxRate,
+      taxRate: fbrTaxRate,
       taxAmount: lineTax,
       subtotal: lineSubtotal,
       lineTotal,
@@ -825,7 +831,10 @@ export async function completeSale(
     );
   }
 
-  const totalAmount = sumSubtotal.minus(totalDiscount).plus(sumTaxAmount);
+  // PRA: PKR 1 per finalized invoice, charged exactly once
+  const praFee = preparedLines.length > 0 ? PRA_INVOICE_FEE : new Prisma.Decimal("0.00");
+  const totalTaxAmount = sumTaxAmount.add(praFee);
+  const totalAmount = sumSubtotal.minus(totalDiscount).plus(totalTaxAmount);
 
   // 4. Validate payments
   if (!Array.isArray(input.payments)) {
@@ -923,7 +932,7 @@ export async function completeSale(
           paymentStatus,
           subtotal: sumSubtotal,
           discountAmount: totalDiscount,
-          taxAmount: sumTaxAmount,
+          taxAmount: totalTaxAmount,
           totalAmount,
           paidAmount: totalPaid,
           changeAmount: totalChange,

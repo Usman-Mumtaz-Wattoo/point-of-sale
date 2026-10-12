@@ -16,11 +16,16 @@ import {
   Package,
   Layers,
   Store,
+  Receipt,
+  Loader2,
 } from "lucide-react";
 import { SalePaymentMethod } from "@prisma/client";
 import { CustomerSearchResultDTO } from "@/lib/customers";
 import { PosCustomerSelector } from "@/components/pos-customer-selector";
 import { checkoutSaleAction, CheckoutActionResult } from "./actions";
+import { getSaleDetailAction } from "@/app/sales/actions";
+import { SaleReceiptModal } from "@/app/sales/sale-receipt-modal";
+import { SerializedSaleDetail } from "@/app/sales/types";
 
 interface BranchOption {
   id: string;
@@ -60,6 +65,7 @@ interface PosViewProps {
 
 export function PosView({
   organizationId,
+  organizationName,
   branches,
   products,
 }: PosViewProps) {
@@ -73,10 +79,20 @@ export function PosView({
 
   const [checkoutResult, setCheckoutResult] = useState<CheckoutActionResult | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [receiptSale, setReceiptSale] = useState<SerializedSaleDetail | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
 
-  // Cart calculations
+  // Authoritative FBR & PRA Financial Rules:
+  // - CASH: 16% FBR Sales Tax
+  // - CARD: 8% FBR Sales Tax (digital incentive, alternative NOT additive)
+  // - PRA: PKR 1 per finalized invoice, charged exactly once
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const total = subtotal;
+  const fbrRate =
+    paymentMethod === SalePaymentMethod.CARD || paymentMethod === SalePaymentMethod.DIGITAL_WALLET ? 8 : 16;
+  const fbrTaxAmount = cart.length > 0 ? Math.round(((subtotal * fbrRate) / 100) * 100) / 100 : 0;
+  const praFee = cart.length > 0 ? 1.0 : 0.0;
+  const total = cart.length > 0 ? Math.round((subtotal + fbrTaxAmount + praFee) * 100) / 100 : 0;
 
   const addToCart = (product: ProductOption, variant?: ProductOption["variants"][0]) => {
     const productId = product.id;
@@ -133,7 +149,7 @@ export function PosView({
 
     const tenderedNum = tenderedAmount ? parseFloat(tenderedAmount) : total;
     if (isNaN(tenderedNum) || tenderedNum < total) {
-      setCheckoutError(`Tendered amount must be at least the total amount ($${total.toFixed(2)}).`);
+      setCheckoutError(`Tendered amount must be at least the total amount (PKR ${total.toFixed(2)}).`);
       return;
     }
 
@@ -171,6 +187,21 @@ export function PosView({
         );
       }
     });
+  };
+
+  const handleOpenReceipt = async (saleId: string) => {
+    setIsLoadingReceipt(true);
+    try {
+      const res = await getSaleDetailAction(saleId, organizationId);
+      if (res.success && res.data) {
+        setReceiptSale(res.data);
+        setIsReceiptModalOpen(true);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingReceipt(false);
+    }
   };
 
   const filteredProducts = products.filter((p) => {
@@ -350,7 +381,7 @@ export function PosView({
 
           {/* Success Notification */}
           {checkoutResult && (
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-200 space-y-1.5 text-xs">
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-200 space-y-2 text-xs">
               <div className="font-bold flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
                 <CheckCircle2 className="w-4 h-4" /> Sale Completed Successfully!
               </div>
@@ -360,13 +391,28 @@ export function PosView({
               </div>
               <div className="flex justify-between">
                 <span>Total Paid:</span>
-                <strong className="text-slate-900 dark:text-white">${checkoutResult.totalAmount}</strong>
+                <strong className="text-slate-900 dark:text-white">PKR {checkoutResult.totalAmount}</strong>
               </div>
               <div className="text-[11px] text-emerald-600 dark:text-emerald-400 pt-1 border-t border-emerald-500/20">
                 {checkoutResult.customerId
                   ? `Assigned to customer account #${checkoutResult.customerId}`
                   : "Recorded as anonymous walk-in transaction"}
               </div>
+              {checkoutResult.saleId && (
+                <button
+                  type="button"
+                  disabled={isLoadingReceipt}
+                  onClick={() => handleOpenReceipt(checkoutResult.saleId!)}
+                  className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                >
+                  {isLoadingReceipt ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Receipt className="w-3.5 h-3.5" />
+                  )}
+                  <span>View / Print Thermal Receipt</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -450,17 +496,27 @@ export function PosView({
             <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Sub Total:</span>
               <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
-                ${subtotal.toFixed(2)}
+                PKR {subtotal.toFixed(2)}
               </span>
             </div>
             <div className="flex justify-between text-slate-500 dark:text-slate-400">
-              <span>Discount (0%):</span>
-              <span className="font-mono text-slate-500">$0.00</span>
+              <span>FBR Sales Tax ({fbrRate}%):</span>
+              <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                +PKR {fbrTaxAmount.toFixed(2)}
+              </span>
             </div>
+            {praFee > 0 && (
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                <span>PRA Invoice Fee:</span>
+                <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                  +PKR {praFee.toFixed(2)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between text-base font-extrabold text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
               <span>Total Payment:</span>
               <span className="font-mono text-indigo-600 dark:text-indigo-400">
-                ${total.toFixed(2)}
+                PKR {total.toFixed(2)}
               </span>
             </div>
           </div>
@@ -505,7 +561,7 @@ export function PosView({
                   onClick={() => setTenderedAmount(total.toFixed(2))}
                   className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                 >
-                  Exact (${total.toFixed(2)})
+                  Exact (PKR {total.toFixed(2)})
                 </button>
               </div>
               <input
@@ -513,7 +569,7 @@ export function PosView({
                 step="0.01"
                 value={tenderedAmount}
                 onChange={(e) => setTenderedAmount(e.target.value)}
-                placeholder={`$${total.toFixed(2)}`}
+                placeholder={`PKR ${total.toFixed(2)}`}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -531,12 +587,21 @@ export function PosView({
                   Processing Checkout...
                 </>
               ) : (
-                `Process Transactions • $${total.toFixed(2)}`
+                `Process Transactions • PKR ${total.toFixed(2)}`
               )}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Thermal Receipt Preview Modal */}
+      <SaleReceiptModal
+        isOpen={isReceiptModalOpen}
+        sale={receiptSale}
+        organizationName={organizationName}
+        currency="PKR"
+        onClose={() => setIsReceiptModalOpen(false)}
+      />
     </div>
   );
 }

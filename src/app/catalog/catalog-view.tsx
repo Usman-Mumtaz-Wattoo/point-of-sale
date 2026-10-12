@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import { Plus, Search, Package, Layers, X, Tag } from "lucide-react";
+import { Plus, Search, Package, X, Tag } from "lucide-react";
 import {
   createCategoryAction,
   createProductAction,

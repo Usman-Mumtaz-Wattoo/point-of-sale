@@ -3,7 +3,6 @@
 import React, { useState, useTransition, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
-  Building2,
   Calendar,
   Clock,
   DollarSign,
@@ -25,8 +24,6 @@ import {
   Layers,
   Activity,
   Award,
-  ArrowDownRight,
-  LineChart as LineChartIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { getDashboardMetricsAction } from "./actions";
