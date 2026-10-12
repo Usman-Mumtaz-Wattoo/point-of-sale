@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
 import { listSalesAction } from "./actions";
 import { SalesTable } from "./sales-table";
 import { SaleDetailDrawer } from "./sale-detail-drawer";
@@ -364,33 +365,26 @@ export function SalesView({
   };
 
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 p-4 sm:p-6 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <AppShell
+      userRole={userRole}
+      userName={userName}
+      organizationName={organizationName}
+      organizationId={organizationId}
+      activePath="/sales"
+    >
+      <div className="space-y-6">
         {/* Navigation & Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Link
-                href={`/dashboard?org=${organizationId}`}
-                className="hover:text-emerald-400 transition-colors flex items-center gap-1"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Dashboard</span>
-              </Link>
-              <span>/</span>
-              <span className="text-slate-200 font-medium">{organizationName}</span>
-              <span>/</span>
-              <span className="text-emerald-400">Sales History</span>
-            </div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-white tracking-tight">Sales Orders & History</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Sales Orders & History</h1>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20">
                 {userRole}
               </span>
             </div>
-            <p className="text-xs text-slate-400">
-              Logged in as <strong className="text-slate-300">{userName}</strong> • Timezone:{" "}
-              <span className="text-slate-300 font-mono">{organizationTimezone}</span>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Audit transactions, inspect line items, and manage customer receipts. Timezone:{" "}
+              <span className="font-mono text-slate-700 dark:text-slate-300">{organizationTimezone}</span>
             </p>
           </div>
 
@@ -399,7 +393,7 @@ export function SalesView({
             {["OWNER", "MANAGER", "CASHIER"].includes(userRole) && (
               <Link
                 href={`/pos?org=${organizationId}`}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-sm shadow-emerald-950/40"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-xs"
               >
                 <ShoppingBag className="w-4 h-4" />
                 <span>Open POS Terminal &rarr;</span>
@@ -407,9 +401,9 @@ export function SalesView({
             )}
             <Link
               href={`/sales/returns?org=${organizationId}`}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs border border-slate-700 hover:border-slate-600 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium text-xs border border-slate-200 dark:border-slate-700 shadow-xs transition-colors"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+              <RotateCcw className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
               <span>Sales Returns &rarr;</span>
             </Link>
           </div>
@@ -418,73 +412,73 @@ export function SalesView({
         {/* KPI Cards Header */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Total Completed Orders */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <div className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">
               <span>Completed Orders</span>
-              <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200 dark:border-blue-500/20">
                 <Receipt className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-bold font-mono text-white tracking-tight">
+            <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white tracking-tight">
               {kpis.totalSalesCount}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">Reflects active filters</div>
+            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Reflects active filters</div>
           </div>
 
           {/* Card 2: Total Revenue */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <div className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">
               <span>Completed Revenue</span>
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-200 dark:border-emerald-500/20">
                 <DollarSign className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-bold font-mono text-emerald-400 tracking-tight">
+            <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
               {formatCurrency(kpis.totalCompletedRevenue, organizationCurrency)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">Excludes voided orders</div>
+            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Excludes voided orders</div>
           </div>
 
           {/* Card 3: Total Discounts Given */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <div className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">
               <span>Discounts Granted</span>
-              <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+              <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-200 dark:border-amber-500/20">
                 <Percent className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-bold font-mono text-amber-400 tracking-tight">
+            <div className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 tracking-tight">
               {formatCurrency(kpis.totalDiscountAmount, organizationCurrency)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">Order & line promotions</div>
+            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Order & line promotions</div>
           </div>
 
           {/* Card 4: Total Tax Collected */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <div className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">
               <span>Tax Collected</span>
-              <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
+              <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-200 dark:border-purple-500/20">
                 <Receipt className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl font-bold font-mono text-purple-300 tracking-tight">
+            <div className="text-2xl font-bold font-mono text-purple-600 dark:text-purple-300 tracking-tight">
               {formatCurrency(kpis.totalTaxAmount, organizationCurrency)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">Applicable sales tax</div>
+            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Applicable sales tax</div>
           </div>
         </div>
 
         {/* Error Banner */}
         {errorMessage && (
-          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3">
+          <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
               <span>{errorMessage}</span>
             </div>
             <button
               type="button"
               onClick={() => fetchSales(currentPage)}
-              className="px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-[11px] font-semibold transition-colors"
+              className="px-2.5 py-1 rounded bg-rose-100 dark:bg-rose-500/20 hover:bg-rose-200 dark:hover:bg-rose-500/30 text-rose-800 dark:text-rose-200 text-[11px] font-semibold transition-colors cursor-pointer"
             >
               Retry
             </button>
@@ -492,17 +486,17 @@ export function SalesView({
         )}
 
         {/* Filter Toolbar Card */}
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4 shadow-sm">
+        <div className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 space-y-4 shadow-xs">
           {/* Top Row: Search input and Clear button */}
           <form onSubmit={handleApplyFilters} className="flex flex-col md:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by invoice #, receipt #, customer name or phone..."
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9.5 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-9.5 pr-8 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
               />
               {searchQuery && (
                 <button
@@ -511,7 +505,7 @@ export function SalesView({
                     setSearchQuery("");
                     fetchSales(1, { search: undefined });
                   }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   aria-label="Clear search"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -523,7 +517,7 @@ export function SalesView({
               <button
                 type="submit"
                 disabled={isPending}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 {isPending ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -538,7 +532,7 @@ export function SalesView({
                   type="button"
                   onClick={handleClearFilters}
                   disabled={isPending}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors border border-slate-700 flex items-center gap-1"
+                  className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium transition-colors border border-slate-200 dark:border-slate-700 flex items-center gap-1 cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                   <span>Reset</span>
@@ -549,8 +543,8 @@ export function SalesView({
 
           {/* Middle Row: Date Presets */}
           <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            <span className="text-[11px] font-medium text-slate-400 mr-1 flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-slate-500" />
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-slate-400 dark:text-slate-500" />
               <span>Date:</span>
             </span>
 
@@ -568,10 +562,10 @@ export function SalesView({
                 key={preset.id}
                 type="button"
                 onClick={() => handleDatePresetChange(preset.id)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                   datePreset === preset.id
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                    : "bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 hover:text-slate-200"
+                    ? "bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/40"
+                    : "bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 {preset.label}
@@ -581,9 +575,9 @@ export function SalesView({
 
           {/* Custom Date Pickers (visible only when 'custom' is selected) */}
           {datePreset === "custom" && (
-            <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-xs">
+            <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs">
               <div className="flex items-center gap-2">
-                <label htmlFor="customStartDate" className="text-slate-400 font-medium">
+                <label htmlFor="customStartDate" className="text-slate-600 dark:text-slate-400 font-medium">
                   From:
                 </label>
                 <input
@@ -591,12 +585,12 @@ export function SalesView({
                   type="date"
                   value={customStartDate}
                   onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div className="flex items-center gap-2">
-                <label htmlFor="customEndDate" className="text-slate-400 font-medium">
+                <label htmlFor="customEndDate" className="text-slate-600 dark:text-slate-400 font-medium">
                   To:
                 </label>
                 <input
@@ -604,14 +598,14 @@ export function SalesView({
                   type="date"
                   value={customEndDate}
                   onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="bg-slate-900 border border-slate-800 rounded px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <button
                 type="button"
                 onClick={() => fetchSales(1)}
-                className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition-colors"
+                className="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition-colors cursor-pointer"
               >
                 Apply Range
               </button>
@@ -619,10 +613,10 @@ export function SalesView({
           )}
 
           {/* Bottom Row: Branch, Status, and Payment Status Dropdowns */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-slate-900">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/80">
             {/* Branch selector */}
             <div>
-              <label htmlFor="branchSelect" className="block text-[11px] font-medium text-slate-400 mb-1">
+              <label htmlFor="branchSelect" className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
                 Branch Scope
               </label>
               <div className="relative">
@@ -630,7 +624,7 @@ export function SalesView({
                   id="branchSelect"
                   value={selectedBranchId}
                   onChange={handleBranchChange}
-                  className="w-full appearance-none bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 pr-8 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full appearance-none bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 pr-8 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="">All Authorized Branches</option>
                   {branches.map((b) => (
@@ -639,13 +633,13 @@ export function SalesView({
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
             </div>
 
             {/* Sale Status selector */}
             <div>
-              <label htmlFor="statusSelect" className="block text-[11px] font-medium text-slate-400 mb-1">
+              <label htmlFor="statusSelect" className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
                 Order Status
               </label>
               <div className="relative">
@@ -653,19 +647,19 @@ export function SalesView({
                   id="statusSelect"
                   value={selectedStatus}
                   onChange={handleStatusChange}
-                  className="w-full appearance-none bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 pr-8 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full appearance-none bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 pr-8 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="COMPLETED">Completed</option>
                   <option value="VOIDED">Voided</option>
                 </select>
-                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
             </div>
 
             {/* Payment Status selector */}
             <div>
-              <label htmlFor="paymentStatusSelect" className="block text-[11px] font-medium text-slate-400 mb-1">
+              <label htmlFor="paymentStatusSelect" className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
                 Payment Status
               </label>
               <div className="relative">
@@ -673,14 +667,14 @@ export function SalesView({
                   id="paymentStatusSelect"
                   value={selectedPaymentStatus}
                   onChange={handlePaymentStatusChange}
-                  className="w-full appearance-none bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 pr-8 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full appearance-none bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 pr-8 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="ALL">All Payment Statuses</option>
                   <option value="PAID">Paid</option>
                   <option value="PARTIAL">Partial</option>
                   <option value="UNPAID">Unpaid</option>
                 </select>
-                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
             </div>
           </div>
@@ -690,9 +684,9 @@ export function SalesView({
         {salesData.items.length > 0 ? (
           <div className="relative">
             {isPending && (
-              <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-xl">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 shadow-lg">
-                  <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+              <div className="absolute inset-0 bg-white/60 dark:bg-slate-950/50 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-xl">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 shadow-lg">
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600 dark:text-emerald-400" />
                   <span>Updating sales list...</span>
                 </div>
               </div>
@@ -711,12 +705,12 @@ export function SalesView({
             />
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/60 p-12 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-slate-900 text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-800">
-              <Receipt className="w-6 h-6 text-slate-500" />
+          <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-950/60 p-12 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-200 dark:border-slate-800">
+              <Receipt className="w-6 h-6 text-slate-400 dark:text-slate-500" />
             </div>
-            <h3 className="text-base font-semibold text-white">No Sales Orders Found</h3>
-            <p className="text-xs text-slate-400 max-w-md mx-auto">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-white">No Sales Orders Found</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
               {hasActiveFilters
                 ? "No sales transactions match the current filter criteria. Try adjusting your search query, dates, or status filters."
                 : "No sales have been processed for this business yet. Completed orders from the POS terminal will appear here."}
@@ -726,7 +720,7 @@ export function SalesView({
                 <button
                   type="button"
                   onClick={handleClearFilters}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                   <span>Clear All Filters</span>
@@ -737,7 +731,7 @@ export function SalesView({
                 <div className="pt-2">
                   <Link
                     href={`/pos?org=${organizationId}`}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-xs"
                   >
                     <ShoppingBag className="w-4 h-4" />
                     <span>Open POS Terminal &rarr;</span>
@@ -763,6 +757,6 @@ export function SalesView({
           fetchSales(currentPage);
         }}
       />
-    </main>
+    </AppShell>
   );
 }

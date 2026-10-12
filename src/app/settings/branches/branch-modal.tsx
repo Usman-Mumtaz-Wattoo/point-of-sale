@@ -118,20 +118,20 @@ function BranchModalContent({
       role="dialog"
       aria-modal="true"
       aria-labelledby="branch-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto"
     >
-      <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8">
+      <div className="w-full max-w-lg bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm font-semibold border border-emerald-100">
+        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-base font-semibold border border-indigo-200 dark:border-indigo-500/20">
               🏪
             </span>
             <div>
-              <h2 id="branch-modal-title" className="text-base font-semibold text-slate-900">
+              <h2 id="branch-modal-title" className="text-base font-semibold text-slate-900 dark:text-white">
                 {isEditing ? `Edit Branch: ${branchToEdit?.name}` : "Create New Branch"}
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {isEditing
                   ? "Update location, contact details, and document prefixes."
                   : "Add an operational retail store or warehouse location."}
@@ -143,7 +143,7 @@ function BranchModalContent({
             type="button"
             onClick={onClose}
             disabled={isPending}
-            className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-sm transition-colors disabled:opacity-50"
+            className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-sm transition-colors disabled:opacity-50"
           >
             ✕
           </button>
@@ -155,7 +155,7 @@ function BranchModalContent({
             {modalError && (
               <div
                 role="alert"
-                className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium"
+                className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-200 text-xs font-medium"
               >
                 {modalError}
               </div>
@@ -163,10 +163,10 @@ function BranchModalContent({
 
             {/* Name & Code */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label
                   htmlFor="branch-name"
-                  className="block text-xs font-semibold text-slate-700"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
                   Branch Name <span className="text-rose-500">*</span>
                 </label>
@@ -179,23 +179,23 @@ function BranchModalContent({
                   value={formData.name}
                   onChange={handleChange}
                   placeholder="e.g. Downtown Outlet"
-                  className={`w-full px-3 py-2 text-sm rounded-lg border text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 transition-colors ${
+                  className={`w-full px-3.5 py-2 text-sm rounded-xl border bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors ${
                     fieldErrors.name
-                      ? "border-rose-300 focus:ring-rose-500/20"
-                      : "border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/20"
+                      ? "border-rose-300 dark:border-rose-600 focus:ring-rose-500/20"
+                      : "border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20"
                   }`}
                 />
                 {fieldErrors.name && (
-                  <p role="alert" className="text-[11px] text-rose-600 font-medium">
+                  <p role="alert" className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
                     {fieldErrors.name}
                   </p>
                 )}
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label
                   htmlFor="branch-code"
-                  className="block text-xs font-semibold text-slate-700"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
                   Branch Code <span className="text-rose-500">*</span>
                 </label>
@@ -207,27 +207,27 @@ function BranchModalContent({
                   value={formData.code}
                   onChange={handleChange}
                   placeholder="e.g. DWTN-01"
-                  className={`w-full px-3 py-2 text-sm font-mono uppercase rounded-lg border text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 transition-colors ${
+                  className={`w-full px-3.5 py-2 text-sm font-mono uppercase rounded-xl border bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors ${
                     fieldErrors.code
-                      ? "border-rose-300 focus:ring-rose-500/20"
-                      : "border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/20"
+                      ? "border-rose-300 dark:border-rose-600 focus:ring-rose-500/20"
+                      : "border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20"
                   }`}
                 />
                 {fieldErrors.code ? (
-                  <p role="alert" className="text-[11px] text-rose-600 font-medium">
+                  <p role="alert" className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
                     {fieldErrors.code}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-slate-400">Unique alphanumeric code (max 20).</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">Unique code (max 20).</p>
                 )}
               </div>
             </div>
 
             {/* Address */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label
                 htmlFor="branch-address"
-                className="block text-xs font-semibold text-slate-700"
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
               >
                 Physical Address
               </label>
@@ -238,16 +238,16 @@ function BranchModalContent({
                 value={formData.address}
                 onChange={handleChange}
                 placeholder="e.g. Shop # 14, Commercial Center"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-colors"
               />
             </div>
 
             {/* City & Phone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label
                   htmlFor="branch-city"
-                  className="block text-xs font-semibold text-slate-700"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
                   City
                 </label>
@@ -258,14 +258,14 @@ function BranchModalContent({
                   value={formData.city}
                   onChange={handleChange}
                   placeholder="e.g. Lahore"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-colors"
                 />
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label
                   htmlFor="branch-phone"
-                  className="block text-xs font-semibold text-slate-700"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
                 >
                   Contact Phone
                 </label>
@@ -276,14 +276,14 @@ function BranchModalContent({
                   value={formData.phone}
                   onChange={handleChange}
                   placeholder="e.g. +92 42 1234567"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-colors"
                 />
               </div>
             </div>
 
             {/* Document Settings Section */}
-            <div className="pt-2 border-t border-slate-100">
-              <span className="block text-xs font-semibold text-slate-700 mb-2">
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+              <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2.5">
                 Document & Warehouse Preferences (Optional)
               </span>
 
@@ -291,7 +291,7 @@ function BranchModalContent({
                 <div className="space-y-1">
                   <label
                     htmlFor="branch-inv-prefix"
-                    className="block text-[11px] font-medium text-slate-600"
+                    className="block text-[11px] font-medium text-slate-600 dark:text-slate-400"
                   >
                     Invoice Prefix
                   </label>
@@ -302,14 +302,14 @@ function BranchModalContent({
                     value={formData.invoiceNumberPrefix}
                     onChange={handleChange}
                     placeholder="e.g. INV-DWTN-"
-                    className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label
                     htmlFor="branch-rec-prefix"
-                    className="block text-[11px] font-medium text-slate-600"
+                    className="block text-[11px] font-medium text-slate-600 dark:text-slate-400"
                   >
                     Receipt Prefix
                   </label>
@@ -320,14 +320,14 @@ function BranchModalContent({
                     value={formData.receiptNumberPrefix}
                     onChange={handleChange}
                     placeholder="e.g. REC-DWTN-"
-                    className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label
                     htmlFor="branch-wh-name"
-                    className="block text-[11px] font-medium text-slate-600"
+                    className="block text-[11px] font-medium text-slate-600 dark:text-slate-400"
                   >
                     Default Warehouse
                   </label>
@@ -338,7 +338,7 @@ function BranchModalContent({
                     value={formData.defaultWarehouseName}
                     onChange={handleChange}
                     placeholder="e.g. Main Store"
-                    className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                 </div>
               </div>
@@ -346,19 +346,19 @@ function BranchModalContent({
           </div>
 
           {/* Modal Footer */}
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+          <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
               disabled={isPending}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs transition-colors disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-xs transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               {isPending && (
                 <span className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />

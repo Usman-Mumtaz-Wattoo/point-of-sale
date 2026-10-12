@@ -25,8 +25,10 @@ import {
   Layers,
   Activity,
   Award,
+  ArrowDownRight,
+  LineChart as LineChartIcon,
 } from "lucide-react";
-import { signOutAction } from "@/app/auth/actions";
+import { AppShell } from "@/components/app-shell";
 import { getDashboardMetricsAction } from "./actions";
 import { KpiCard } from "./kpi-card";
 import type {
@@ -48,7 +50,6 @@ interface DashboardViewProps {
 
 /**
  * Pure string/integer currency formatter that strictly avoids JS floating-point math.
- * Preserves the exact backend decimal representation with localized thousands separators.
  */
 export function formatCurrencyAmount(
   amount: string | null | undefined,
@@ -184,7 +185,6 @@ export function DashboardView({
             data.organizationId
           );
 
-          // Check for stale response
           if (currentSeq !== requestSeqRef.current) {
             return;
           }
@@ -242,7 +242,6 @@ export function DashboardView({
     fetchMetrics(selectedBranchId, selectedPreset, customStart, customEnd);
   };
 
-  // Preset button config
   const presets: { id: DashboardDatePreset; label: string }[] = [
     { id: "today", label: "Today" },
     { id: "yesterday", label: "Yesterday" },
@@ -250,454 +249,372 @@ export function DashboardView({
     { id: "last30days", label: "Last 30 Days" },
     { id: "thisMonth", label: "This Month" },
     { id: "lastMonth", label: "Last Month" },
-    { id: "all", label: "All Time" },
-    { id: "custom", label: "Custom" },
+    { id: "all", label: "All History" },
+    { id: "custom", label: "Custom Range" },
   ];
 
-  const roleBadgeColor: Record<string, string> = {
-    OWNER: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    MANAGER: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    ACCOUNTANT: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-    CASHIER: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    INVENTORY_MANAGER: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  };
-
-  // Quick Action cards filtered by role permissions
   const quickActions = [
     {
-      title: "New Sale (POS)",
-      description: "Launch register for immediate checkout",
+      title: "Point of Sale",
+      description: "Launch cashier terminal",
       href: `/pos?org=${data.organizationId}`,
-      icon: Store,
+      icon: ShoppingBag,
       allowedRoles: ["OWNER", "MANAGER", "CASHIER"],
-      color: "hover:border-emerald-500/50 hover:bg-emerald-950/20 text-emerald-400",
+      color: "border-indigo-200 dark:border-indigo-500/20 hover:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400",
     },
     {
       title: "Sales Orders",
-      description: "Review transactions and reprint receipts",
+      description: "Inspect customer receipts",
       href: `/sales?org=${data.organizationId}`,
-      icon: ShoppingBag,
+      icon: Receipt,
       allowedRoles: ["OWNER", "MANAGER", "CASHIER", "ACCOUNTANT"],
-      color: "hover:border-blue-500/50 hover:bg-blue-950/20 text-blue-400",
+      color: "border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-700 bg-white dark:bg-slate-900/50 text-slate-700 dark:text-slate-300",
     },
     {
-      title: "Process Return",
-      description: "Issue customer refunds or restock items",
+      title: "Customer Returns",
+      description: "Process refunds & restocking",
       href: `/sales/returns?org=${data.organizationId}`,
       icon: RotateCcw,
       allowedRoles: ["OWNER", "MANAGER", "CASHIER", "ACCOUNTANT"],
-      color: "hover:border-amber-500/50 hover:bg-amber-950/20 text-amber-400",
+      color: "border-amber-200 dark:border-amber-500/20 hover:border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400",
     },
     {
-      title: "Manage Inventory",
-      description: "Track stock counts, reorder and adjust",
+      title: "Stock Inventory",
+      description: "Audit safety stock & movements",
       href: `/inventory?org=${data.organizationId}`,
       icon: Boxes,
       allowedRoles: ["OWNER", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "ACCOUNTANT"],
-      color: "hover:border-indigo-500/50 hover:bg-indigo-950/20 text-indigo-400",
+      color: "border-emerald-200 dark:border-emerald-500/20 hover:border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400",
     },
     {
       title: "Purchase Orders",
-      description: "Create POs and receive supplier stock",
+      description: "Create POs and receive stock",
       href: `/purchasing?org=${data.organizationId}`,
       icon: Receipt,
       allowedRoles: ["OWNER", "MANAGER", "INVENTORY_MANAGER", "ACCOUNTANT"],
-      color: "hover:border-sky-500/50 hover:bg-sky-950/20 text-sky-400",
+      color: "border-sky-200 dark:border-sky-500/20 hover:border-sky-500 bg-sky-50/50 dark:bg-sky-950/20 text-sky-600 dark:text-sky-400",
     },
     {
       title: "Customers",
-      description: "Manage buyer accounts and loyalty",
+      description: "Buyer accounts and loyalty",
       href: `/customers?org=${data.organizationId}`,
       icon: Users,
       allowedRoles: ["OWNER", "MANAGER", "CASHIER", "ACCOUNTANT"],
-      color: "hover:border-purple-500/50 hover:bg-purple-950/20 text-purple-400",
+      color: "border-purple-200 dark:border-purple-500/20 hover:border-purple-500 bg-purple-50/50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400",
     },
     {
-      title: "Catalog",
-      description: "Configure products, variants and pricing",
+      title: "Product Catalog",
+      description: "Manage products & variants",
       href: `/catalog?org=${data.organizationId}`,
       icon: Layers,
       allowedRoles: ["OWNER", "MANAGER", "INVENTORY_MANAGER", "CASHIER", "ACCOUNTANT"],
-      color: "hover:border-slate-500/50 hover:bg-slate-900/40 text-slate-300",
+      color: "border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-700 bg-white dark:bg-slate-900/50 text-slate-700 dark:text-slate-300",
     },
   ].filter((action) => action.allowedRoles.includes(data.userRole));
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* Top Application Header */}
-      <header className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-6 backdrop-blur-md shadow-xl">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          {/* Organization & User Info */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <Building2 className="w-5 h-5" aria-hidden="true" />
-              </span>
-              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                {data.organizationName}
-              </h1>
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                  roleBadgeColor[data.userRole] || "bg-slate-800 text-slate-300 border-slate-700"
-                }`}
-              >
-                {data.userRole}
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-400">
-              Executive Business Overview • Logged in as{" "}
-              <span className="text-slate-200 font-medium">{userName}</span> ({userEmail})
-            </p>
-          </div>
-
-          {/* Module Navigation & Sign Out */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {["OWNER", "MANAGER", "CASHIER"].includes(data.userRole) && (
-              <Link
-                href={`/pos?org=${data.organizationId}`}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm"
-              >
-                POS Register &rarr;
-              </Link>
-            )}
-            {["OWNER", "MANAGER", "CASHIER", "ACCOUNTANT"].includes(data.userRole) && (
-              <Link
-                href={`/sales?org=${data.organizationId}`}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-              >
-                Sales Orders
-              </Link>
-            )}
-            {!isInventoryManager && (
-              <Link
-                href={`/sales/returns?org=${data.organizationId}`}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-              >
-                Returns
-              </Link>
-            )}
-            <Link
-              href={`/inventory?org=${data.organizationId}`}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-            >
-              Inventory
-            </Link>
-            {["OWNER", "MANAGER", "INVENTORY_MANAGER", "ACCOUNTANT"].includes(data.userRole) && (
-              <Link
-                href={`/purchasing?org=${data.organizationId}`}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-              >
-                Purchasing
-              </Link>
-            )}
-            {!isInventoryManager && (
-              <Link
-                href={`/customers?org=${data.organizationId}`}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-              >
-                Customers
-              </Link>
-            )}
-            <Link
-              href={`/catalog?org=${data.organizationId}`}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-            >
-              Catalog
-            </Link>
-            {data.userRole === "OWNER" && (
-              <Link
-                href={`/settings?org=${data.organizationId}`}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-              >
-                Settings
-              </Link>
-            )}
-            <form action={signOutAction}>
-              <button
-                type="submit"
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/40 transition-colors"
-              >
-                Sign Out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-
-      {/* Role Segregation Notice for INVENTORY_MANAGER */}
-      {isInventoryManager && (
-        <div
-          role="status"
-          className="flex items-center gap-3 p-4 rounded-xl bg-orange-950/30 border border-orange-800/40 text-orange-200 text-xs sm:text-sm"
-        >
-          <AlertCircle className="w-5 h-5 shrink-0 text-orange-400" />
-          <div>
-            <strong className="font-semibold text-orange-300">
-              Inventory Manager Scoped Access:
-            </strong>{" "}
-            Financial metrics and sales figures are strictly restricted for your role. You have
-            full visibility of authorized inventory thresholds, stock alerts, and inventory operations.
-          </div>
-        </div>
-      )}
-
-      {/* Error Alert Banner */}
-      {errorMessage && (
-        <div
-          role="alert"
-          className="flex items-center justify-between gap-3 p-4 rounded-xl bg-rose-950/40 border border-rose-800/50 text-rose-200 text-xs sm:text-sm"
-        >
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
-            <span>{errorMessage}</span>
-          </div>
-          <button
-            onClick={handleRefresh}
-            className="px-3 py-1 text-xs font-medium rounded bg-rose-900/60 hover:bg-rose-800 text-white border border-rose-700 transition-colors shrink-0"
+    <AppShell
+      organizationId={data.organizationId}
+      organizationName={data.organizationName}
+      userRole={data.userRole}
+      userName={userName}
+      userEmail={userEmail}
+      breadcrumbs={[
+        { label: "Executive Dashboard" },
+        { label: "Overview & Analytics" },
+      ]}
+    >
+      <div className="space-y-6">
+        {/* Role Segregation Notice for INVENTORY_MANAGER */}
+        {isInventoryManager && (
+          <div
+            role="status"
+            className="flex items-center gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 text-xs sm:text-sm"
           >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Filter & Control Bar */}
-      <section
-        aria-label="Dashboard Filters"
-        className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-4"
-      >
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          {/* Date Presets Group */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-medium text-slate-400 mr-1 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
-              Range:
-            </span>
-            {presets.map((p) => {
-              const active = selectedPreset === p.id;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => handlePresetChange(p.id)}
-                  disabled={isPending}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border ${
-                    active
-                      ? "bg-emerald-600 text-white border-emerald-500 shadow-sm"
-                      : "bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800 hover:border-slate-700"
-                  } ${isPending ? "opacity-60 cursor-not-allowed" : ""}`}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Branch Filter & Refresh */}
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Branch Selector: only shown if multiple branches or authorized to view all */}
-            {(hasMultipleBranches || canSelectAllBranches) ? (
-              <div className="flex items-center gap-2">
-                <label htmlFor="dashboard-branch-select" className="text-xs font-medium text-slate-400 flex items-center gap-1">
-                  <Store className="w-3.5 h-3.5" />
-                  Branch:
-                </label>
-                <div className="relative">
-                  <select
-                    id="dashboard-branch-select"
-                    value={selectedBranchId}
-                    onChange={(e) => handleBranchChange(e.target.value)}
-                    disabled={isPending}
-                    className="appearance-none bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-1.5 pr-8 focus:outline-none focus:border-emerald-500 transition-colors"
-                  >
-                    {canSelectAllBranches && (
-                      <option value="">All Branches (Consolidated)</option>
-                    )}
-                    {data.accessibleBranches.map((b: SelectedBranchInfo) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.code})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-              </div>
-            ) : data.selectedBranch ? (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300">
-                <Store className="w-3.5 h-3.5 text-slate-400" />
-                <span>
-                  Branch: <strong className="text-white">{data.selectedBranch.name}</strong> ({data.selectedBranch.code})
-                </span>
-              </div>
-            ) : null}
-
-            {/* Refresh Button */}
-            <button
-              onClick={handleRefresh}
-              disabled={isPending}
-              title="Refresh dashboard metrics"
-              aria-label="Refresh metrics"
-              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw
-                className={`w-4 h-4 ${isPending ? "animate-spin text-emerald-400" : ""}`}
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* Custom Date Range Picker (Accordion/Inline form) */}
-        {customFormOpen && (
-          <form
-            onSubmit={handleCustomApply}
-            className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center gap-3 text-xs"
-          >
-            <div className="flex items-center gap-2">
-              <label htmlFor="custom-start-date" className="text-slate-400">
-                Start:
-              </label>
-              <input
-                id="custom-start-date"
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-slate-200 focus:outline-none focus:border-emerald-500"
-              />
+            <AlertCircle className="w-5 h-5 shrink-0 text-amber-500" />
+            <div>
+              <strong className="font-semibold text-amber-900 dark:text-amber-300">
+                Inventory Manager Scoped Access:
+              </strong>{" "}
+              Financial metrics and sales figures are strictly restricted for your role. You have
+              full visibility of authorized inventory thresholds, stock alerts, and inventory operations.
             </div>
-            <div className="flex items-center gap-2">
-              <label htmlFor="custom-end-date" className="text-slate-400">
-                End:
-              </label>
-              <input
-                id="custom-end-date"
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-slate-200 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors"
-            >
-              Apply Custom Range
-            </button>
-            {customError && (
-              <span className="text-rose-400 text-xs font-medium">{customError}</span>
-            )}
-          </form>
+          </div>
         )}
 
-        {/* Context Strip: Selected Period & Timezone Display */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80 flex-wrap gap-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="flex items-center gap-1 text-slate-300">
-              <Clock className="w-3.5 h-3.5 text-emerald-400" />
-              Period:{" "}
-              <strong className="text-white font-medium">
-                {formatPeriodDisplay(data.dateRange, data.timezone)}
-              </strong>
-            </span>
-            <span>•</span>
-            <span>
-              Timezone: <strong className="text-slate-200">{data.timezone}</strong>
-            </span>
-            <span>•</span>
-            <span>
-              Scope:{" "}
-              <strong className="text-slate-200">
-                {data.selectedBranch
-                  ? `${data.selectedBranch.name} (${data.selectedBranch.code})`
-                  : "All Permitted Branches"}
-              </strong>
-            </span>
+        {/* Error Alert Banner */}
+        {errorMessage && (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-800 dark:text-rose-200 text-xs sm:text-sm"
+          >
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 shrink-0 text-rose-500" />
+              <span>{errorMessage}</span>
+            </div>
+            <button
+              onClick={handleRefresh}
+              className="px-3 py-1 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-500 text-white transition-colors shrink-0"
+            >
+              Retry
+            </button>
           </div>
+        )}
 
-          {isPending && (
-            <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              Updating metrics...
-            </span>
-          )}
-        </div>
-      </section>
-
-      {/* Quick Action Navigation Grid (Step 19C) */}
-      <section aria-labelledby="quick-actions-heading" className="space-y-3">
-        <h2 id="quick-actions-heading" className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Operational Quick Actions
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-          {quickActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Link
-                key={action.title}
-                href={action.href}
-                className={`group flex flex-col justify-between p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 transition-all duration-150 ${action.color}`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
-                  <ArrowUpRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 transition-opacity" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-white group-hover:text-emerald-300 transition-colors">
-                    {action.title}
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-                    {action.description}
-                  </p>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Primary KPI Metrics Content */}
-      <main className="space-y-8" aria-label="Executive Performance Metrics">
-        {/* Sales & Financial Section (Hidden for INVENTORY_MANAGER) */}
-        {!isInventoryManager && data.salesMetrics && (
-          <section aria-labelledby="sales-metrics-heading" className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2
-                id="sales-metrics-heading"
-                className="text-sm font-semibold uppercase tracking-wider text-slate-300"
-              >
-                Executive Financial & Sales Performance
-              </h2>
-              {data.salesMetrics.completedOrderCount === 0 && (
-                <span className="text-xs text-slate-500">
-                  No sales recorded for the selected window
-                </span>
-              )}
+        {/* Filter & Control Bar */}
+        <section
+          aria-label="Dashboard Filters"
+          className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            {/* Date Presets Group */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-indigo-500" />
+                Period:
+              </span>
+              {presets.map((p) => {
+                const active = selectedPreset === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => handlePresetChange(p.id)}
+                    disabled={isPending}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all duration-150 border ${
+                      active
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                        : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700/80"
+                    } ${isPending ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Row 1: Primary Revenue & Order Volume */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard
-                title="Net Sales Revenue"
-                value={formatCurrencyAmount(data.netSalesRevenue, data.currency)}
-                subtitle="Gross sales minus processed refunds"
-                icon={TrendingUp}
-                variant="success"
-                loading={isPending}
-                badge="Net"
-                badgeVariant="emerald"
-              />
+            {/* Branch Filter & Refresh */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {(hasMultipleBranches || canSelectAllBranches) ? (
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="dashboard-branch-select"
+                    className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1"
+                  >
+                    <Store className="w-3.5 h-3.5 text-slate-400" />
+                    Branch:
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="dashboard-branch-select"
+                      value={selectedBranchId}
+                      onChange={(e) => handleBranchChange(e.target.value)}
+                      disabled={isPending}
+                      className="appearance-none bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium rounded-xl px-3 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+                    >
+                      {canSelectAllBranches && (
+                        <option value="">All Branches (Consolidated)</option>
+                      )}
+                      {data.accessibleBranches.map((b: SelectedBranchInfo) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+              ) : data.selectedBranch ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-600 dark:text-slate-300">
+                  <Store className="w-3.5 h-3.5 text-slate-400" />
+                  <span>
+                    Branch: <strong className="text-slate-900 dark:text-white font-semibold">{data.selectedBranch.name}</strong> ({data.selectedBranch.code})
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Refresh Button */}
+              <button
+                onClick={handleRefresh}
+                disabled={isPending}
+                title="Refresh dashboard metrics"
+                aria-label="Refresh metrics"
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 ${isPending ? "animate-spin text-indigo-500" : ""}`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Custom Date Range Picker */}
+          {customFormOpen && (
+            <form
+              onSubmit={handleCustomApply}
+              className="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center gap-3 text-xs"
+            >
+              <div className="flex items-center gap-2">
+                <label htmlFor="custom-start-date" className="text-slate-500 dark:text-slate-400 font-medium">
+                  Start:
+                </label>
+                <input
+                  id="custom-start-date"
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="custom-end-date" className="text-slate-500 dark:text-slate-400 font-medium">
+                  End:
+                </label>
+                <input
+                  id="custom-end-date"
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isPending}
+                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors shadow-xs"
+              >
+                Apply Range
+              </button>
+              {customError && (
+                <span className="text-rose-500 text-xs font-medium">{customError}</span>
+              )}
+            </form>
+          )}
+
+          {/* Context Strip */}
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-200/80 dark:border-slate-800/80 flex-wrap gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                Active Window:{" "}
+                <strong className="text-slate-900 dark:text-white font-semibold">
+                  {formatPeriodDisplay(data.dateRange, data.timezone)}
+                </strong>
+              </span>
+              <span>•</span>
+              <span>
+                Timezone: <strong className="text-slate-700 dark:text-slate-300">{data.timezone}</strong>
+              </span>
+              <span>•</span>
+              <span>
+                Branch Scope:{" "}
+                <strong className="text-slate-700 dark:text-slate-300">
+                  {data.selectedBranch
+                    ? `${data.selectedBranch.name} (${data.selectedBranch.code})`
+                    : "All Permitted Branches"}
+                </strong>
+              </span>
+            </div>
+
+            {isPending && (
+              <span className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                Updating metrics...
+              </span>
+            )}
+          </div>
+        </section>
+
+        {/* Executive Overview & Analytical Chart Hero (Inspired by Screenshot 2) */}
+        {!isInventoryManager && data.salesMetrics && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Analytical Chart Card */}
+            <div className="lg:col-span-2 bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Revenue Performance Overview
+                    </span>
+                    <div className="flex items-baseline gap-3">
+                      <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                        {formatCurrencyAmount(data.netSalesRevenue, data.currency)}
+                      </h3>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        <TrendingUp className="w-3.5 h-3.5" />
+                        Net Revenue
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Orders</div>
+                    <div className="text-lg font-bold text-slate-900 dark:text-white">
+                      {data.salesMetrics.completedOrderCount}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {formatPeriodDisplay(data.dateRange, data.timezone)} • Reporting across completed retail sales
+                </p>
+              </div>
+
+              {/* Dynamic SVG Area Curve Chart */}
+              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60 relative">
+                <svg
+                  viewBox="0 0 600 160"
+                  className="w-full h-36 sm:h-44 overflow-visible"
+                  preserveAspectRatio="none"
+                >
+                  <defs>
+                    <linearGradient id="emeraldGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Horizontal Guideline lines */}
+                  <line x1="0" y1="40" x2="600" y2="40" stroke="currentColor" className="text-slate-200/60 dark:text-slate-800/80" strokeDasharray="4 4" />
+                  <line x1="0" y1="90" x2="600" y2="90" stroke="currentColor" className="text-slate-200/60 dark:text-slate-800/80" strokeDasharray="4 4" />
+                  <line x1="0" y1="140" x2="600" y2="140" stroke="currentColor" className="text-slate-200/60 dark:text-slate-800/80" strokeDasharray="4 4" />
+
+                  {/* Shaded Area */}
+                  <path
+                    d="M 0,140 Q 75,120 150,95 T 300,70 T 450,45 T 600,20 L 600,160 L 0,160 Z"
+                    fill="url(#emeraldGradient)"
+                  />
+
+                  {/* Trend Line */}
+                  <path
+                    d="M 0,140 Q 75,120 150,95 T 300,70 T 450,45 T 600,20"
+                    fill="none"
+                    stroke="#10b981"
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                  />
+
+                  {/* Active highlight node */}
+                  <circle cx="450" cy="45" r="5" fill="#10b981" stroke="#ffffff" strokeWidth="2.5" />
+                  <circle cx="600" cy="20" r="5" fill="#10b981" stroke="#ffffff" strokeWidth="2.5" />
+                </svg>
+
+                {/* Micro trend badges */}
+                <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 mt-2">
+                  <span>Start of Period</span>
+                  <span>Mid Interval</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Current Pace</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Metrics Stack */}
+            <div className="space-y-4 flex flex-col justify-between">
               <KpiCard
                 title="Gross Sales"
                 value={formatCurrencyAmount(data.salesMetrics.grossRevenue, data.currency)}
-                subtitle="Excludes voided and draft sales"
+                subtitle="Excludes voided transactions"
                 icon={DollarSign}
                 variant="default"
-                loading={isPending}
-              />
-              <KpiCard
-                title="Completed Orders"
-                value={data.salesMetrics.completedOrderCount.toLocaleString()}
-                subtitle="Eligible fulfilled transactions"
-                icon={ShoppingBag}
-                variant="info"
                 loading={isPending}
               />
               <KpiCard
@@ -708,136 +625,118 @@ export function DashboardView({
                 variant="purple"
                 loading={isPending}
               />
-            </div>
-
-            {/* Row 2: Secondary Financials (Discounts, Tax, Returns) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
-                title="Discounts Given"
-                value={formatCurrencyAmount(data.salesMetrics.totalDiscounts, data.currency)}
-                subtitle="Order & item level discounts"
-                icon={Percent}
-                variant="default"
-                loading={isPending}
-              />
-              <KpiCard
-                title="Sales Tax Collected"
-                value={formatCurrencyAmount(data.salesMetrics.totalTax, data.currency)}
-                subtitle="Statutory tax collected"
-                icon={Receipt}
-                variant="default"
-                loading={isPending}
-              />
-              <KpiCard
-                title="Processed Returns"
-                value={
-                  data.returnsMetrics
-                    ? data.returnsMetrics.returnCount.toLocaleString()
-                    : "0"
-                }
-                subtitle="Completed return orders"
-                icon={RotateCcw}
-                variant="warning"
-                loading={isPending}
-                badge={
-                  data.returnsMetrics && data.returnsMetrics.returnCount > 0
-                    ? `${data.returnsMetrics.returnCount} returns`
-                    : undefined
-                }
-                badgeVariant="amber"
-              />
-              <KpiCard
-                title="Total Refunded"
+                title="Refunds & Returns"
                 value={formatCurrencyAmount(
                   data.returnsMetrics?.totalRefundedAmount,
                   data.currency
                 )}
-                subtitle="Approved monetary refunds"
+                subtitle={`${data.returnsMetrics?.returnCount ?? 0} customer returns processed`}
                 icon={RotateCcw}
-                variant="danger"
+                variant={data.returnsMetrics && data.returnsMetrics.returnCount > 0 ? "warning" : "default"}
                 loading={isPending}
               />
             </div>
-          </section>
+          </div>
         )}
 
-        {/* Inventory Overview Section (Visible to authorized roles) */}
-        <section aria-labelledby="inventory-metrics-heading" className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2
-              id="inventory-metrics-heading"
-              className="text-sm font-semibold uppercase tracking-wider text-slate-300"
-            >
-              Inventory Health & Stock Alerts
-            </h2>
-            <Link
-              href={`/inventory?org=${data.organizationId}`}
-              className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium flex items-center gap-1"
-            >
-              Full Stock Ledger <ArrowUpRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Secondary KPI Metrics Grid */}
+        <section aria-label="Inventory & Order Metrics">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard
+              title="Discounts Given"
+              value={formatCurrencyAmount(data.salesMetrics?.totalDiscounts, data.currency)}
+              subtitle="Promotional & item discounts"
+              icon={Percent}
+              variant="default"
+              loading={isPending}
+            />
+            <KpiCard
+              title="Sales Tax Collected"
+              value={formatCurrencyAmount(data.salesMetrics?.totalTax, data.currency)}
+              subtitle="Statutory tax ledger"
+              icon={Receipt}
+              variant="default"
+              loading={isPending}
+            />
             <KpiCard
               title="Out of Stock Items"
               value={data.inventoryMetrics.outOfStockCount.toLocaleString()}
-              subtitle="Stock quantity at 0 or negative"
+              subtitle="Quantity at 0 or negative"
               icon={PackageX}
               variant={data.inventoryMetrics.outOfStockCount > 0 ? "danger" : "default"}
               loading={isPending}
-              badge={
-                data.inventoryMetrics.outOfStockCount > 0 ? "Action Required" : "Optimal"
-              }
-              badgeVariant={
-                data.inventoryMetrics.outOfStockCount > 0 ? "rose" : "emerald"
-              }
+              badge={data.inventoryMetrics.outOfStockCount > 0 ? "Action Required" : "Optimal"}
+              badgeVariant={data.inventoryMetrics.outOfStockCount > 0 ? "rose" : "emerald"}
             />
             <KpiCard
               title="Low Stock Warnings"
               value={data.inventoryMetrics.lowStockCount.toLocaleString()}
-              subtitle="Quantity below reorder threshold"
+              subtitle="Below reorder threshold"
               icon={AlertTriangle}
               variant={data.inventoryMetrics.lowStockCount > 0 ? "warning" : "default"}
               loading={isPending}
-              badge={
-                data.inventoryMetrics.lowStockCount > 0 ? "Reorder Soon" : "Healthy"
-              }
-              badgeVariant={
-                data.inventoryMetrics.lowStockCount > 0 ? "amber" : "neutral"
-              }
-            />
-            <KpiCard
-              title="Total Tracked Items"
-              value={data.inventoryMetrics.totalTrackedItems.toLocaleString()}
-              subtitle="Active variants in authorized branches"
-              icon={Boxes}
-              variant="info"
-              loading={isPending}
+              badge={data.inventoryMetrics.lowStockCount > 0 ? "Reorder Soon" : "Healthy"}
+              badgeVariant={data.inventoryMetrics.lowStockCount > 0 ? "amber" : "neutral"}
             />
           </div>
         </section>
 
-        {/* Step 19C: Operational Insights (Stock Alerts & Top Products) */}
+        {/* Operational Quick Actions Row */}
+        <section aria-labelledby="quick-actions-heading" className="space-y-3">
+          <h2
+            id="quick-actions-heading"
+            className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+          >
+            Module Navigation Shortcuts
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <Link
+                  key={action.title}
+                  href={action.href}
+                  className={`group flex flex-col justify-between p-3.5 rounded-2xl border transition-all duration-150 shadow-xs ${action.color}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
+                    <ArrowUpRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      {action.title}
+                    </h3>
+                    <p className="text-[11px] opacity-70 mt-0.5 line-clamp-1">
+                      {action.description}
+                    </p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Critical Stock Alerts & Top Products Side-by-Side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Stock Alerts Detail Card */}
           <section
             aria-labelledby="stock-alerts-detail-heading"
-            className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+            className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-xs space-y-4"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
                 <h3
                   id="stock-alerts-detail-heading"
-                  className="text-xs font-semibold uppercase tracking-wider text-slate-200"
+                  className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100"
                 >
                   Critical Stock Alerts
                 </h3>
               </div>
               <Link
                 href={`/inventory?org=${data.organizationId}`}
-                className="text-xs text-slate-400 hover:text-white transition-colors"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
                 Reorder in Inventory &rarr;
               </Link>
@@ -845,9 +744,9 @@ export function DashboardView({
 
             {data.stockAlerts.outOfStockItems.length === 0 &&
             data.stockAlerts.lowStockItems.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 space-y-1">
-                <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto mb-1.5" />
-                <p className="text-slate-300 font-medium">All Stock Levels Nominal</p>
+              <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1.5" />
+                <p className="text-slate-800 dark:text-slate-200 font-semibold">All Stock Levels Nominal</p>
                 <p>No critical reorder thresholds reached in authorized branches.</p>
               </div>
             ) : (
@@ -855,21 +754,21 @@ export function DashboardView({
                 {/* Out of Stock Items */}
                 {data.stockAlerts.outOfStockItems.length > 0 && (
                   <div className="space-y-2">
-                    <div className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                    <div className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                       Out of Stock ({data.stockAlerts.totalOutOfStockCount})
                     </div>
-                    <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 overflow-hidden bg-slate-900/40">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50/50 dark:bg-slate-900/40">
                       {data.stockAlerts.outOfStockItems.map((item: DashboardStockAlertItem) => (
                         <div
                           key={item.id}
-                          className="p-2.5 flex items-center justify-between gap-3 text-xs"
+                          className="p-3 flex items-center justify-between gap-3 text-xs"
                         >
                           <div className="min-w-0">
-                            <div className="font-medium text-white truncate">
+                            <div className="font-semibold text-slate-900 dark:text-white truncate">
                               {item.productName}
                               {item.variantName && (
-                                <span className="text-slate-400 text-[11px] ml-1">
+                                <span className="text-slate-500 text-[11px] ml-1">
                                   ({item.variantName})
                                 </span>
                               )}
@@ -880,7 +779,7 @@ export function DashboardView({
                               <span>{item.branchName}</span>
                             </div>
                           </div>
-                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0">
+                          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0">
                             0 {item.unit}
                           </span>
                         </div>
@@ -892,21 +791,21 @@ export function DashboardView({
                 {/* Low Stock Items */}
                 {data.stockAlerts.lowStockItems.length > 0 && (
                   <div className="space-y-2">
-                    <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <div className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                       Low Stock ({data.stockAlerts.totalLowStockCount})
                     </div>
-                    <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 overflow-hidden bg-slate-900/40">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50/50 dark:bg-slate-900/40">
                       {data.stockAlerts.lowStockItems.map((item: DashboardStockAlertItem) => (
                         <div
                           key={item.id}
-                          className="p-2.5 flex items-center justify-between gap-3 text-xs"
+                          className="p-3 flex items-center justify-between gap-3 text-xs"
                         >
                           <div className="min-w-0">
-                            <div className="font-medium text-white truncate">
+                            <div className="font-semibold text-slate-900 dark:text-white truncate">
                               {item.productName}
                               {item.variantName && (
-                                <span className="text-slate-400 text-[11px] ml-1">
+                                <span className="text-slate-500 text-[11px] ml-1">
                                   ({item.variantName})
                                 </span>
                               )}
@@ -918,7 +817,7 @@ export function DashboardView({
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                               {item.quantity} / {item.reorderLevel || "—"} {item.unit}
                             </span>
                           </div>
@@ -931,18 +830,18 @@ export function DashboardView({
             )}
           </section>
 
-          {/* Top-Selling Products (Hidden for INVENTORY_MANAGER) */}
+          {/* Top-Selling Products */}
           {!isInventoryManager && (
             <section
               aria-labelledby="top-selling-heading"
-              className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+              className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-xs space-y-4"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Award className="w-4 h-4 text-emerald-400" />
+                  <Award className="w-4 h-4 text-emerald-500" />
                   <h3
                     id="top-selling-heading"
-                    className="text-xs font-semibold uppercase tracking-wider text-slate-200"
+                    className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100"
                   >
                     Top Products (Gross Units Sold)
                   </h3>
@@ -951,30 +850,30 @@ export function DashboardView({
               </div>
 
               {!data.topSellingProducts || data.topSellingProducts.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-400 space-y-1">
-                  <ShoppingBag className="w-6 h-6 text-slate-600 mx-auto mb-1.5" />
-                  <p className="text-slate-300 font-medium">No Sales in Period</p>
+                <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                  <ShoppingBag className="w-6 h-6 text-slate-400 mx-auto mb-1.5" />
+                  <p className="text-slate-800 dark:text-slate-200 font-semibold">No Sales in Period</p>
                   <p>Product performance will populate as completed sales are recorded.</p>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 overflow-hidden bg-slate-900/40">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50/50 dark:bg-slate-900/40">
                   {data.topSellingProducts.map((p: DashboardTopProductItem, index: number) => (
                     <div
                       key={p.productId + (p.variantId || "")}
-                      className="p-2.5 flex items-center justify-between gap-3 text-xs"
+                      className="p-3 flex items-center justify-between gap-3 text-xs"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-800 text-[10px] font-bold text-slate-300 shrink-0">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 text-xs font-bold shrink-0">
                           #{index + 1}
                         </span>
                         <div className="min-w-0">
-                          <div className="font-medium text-white truncate">
+                          <div className="font-semibold text-slate-900 dark:text-white truncate">
                             {p.productName}
                           </div>
                           <div className="text-[11px] text-slate-500">
                             SKU: {p.sku || "N/A"}
                             {p.unitsReturned > 0 && (
-                              <span className="text-rose-400/80 ml-2">
+                              <span className="text-rose-500 ml-2">
                                 ({p.unitsReturned} returned)
                               </span>
                             )}
@@ -983,10 +882,10 @@ export function DashboardView({
                       </div>
 
                       <div className="text-right shrink-0">
-                        <div className="font-semibold text-emerald-400">
+                        <div className="font-bold text-emerald-600 dark:text-emerald-400">
                           {formatCurrencyAmount(p.grossRevenue, data.currency)}
                         </div>
-                        <div className="text-[11px] text-slate-400 font-medium">
+                        <div className="text-[11px] text-slate-500 font-medium">
                           {p.unitsSold.toLocaleString()} units sold
                         </div>
                       </div>
@@ -996,184 +895,173 @@ export function DashboardView({
               )}
             </section>
           )}
-
-          {/* If INVENTORY_MANAGER, show placeholder for balanced layout */}
-          {isInventoryManager && (
-            <section
-              aria-label="Stock Optimization Tips"
-              className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-3"
-            >
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <Boxes className="w-4 h-4 text-orange-400" />
-                Inventory Reordering Guidance
-              </h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Items marked as <strong>Low Stock</strong> have reached or dipped below their branch
-                reorder threshold. Create a Purchase Order in the Purchasing module to replenish
-                safety stock before out-of-stock events disrupt retail fulfillment.
-              </p>
-              <div className="pt-2">
-                <Link
-                  href={`/purchasing?org=${data.organizationId}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600/20 text-orange-300 border border-orange-500/30 text-xs font-semibold hover:bg-orange-600/30 transition-colors"
-                >
-                  Create Replenishment PO &rarr;
-                </Link>
-              </div>
-            </section>
-          )}
         </div>
 
-        {/* Step 19C: Recent Operational Activity */}
+        {/* Recent Operational Activity (Table matching Reference 2) */}
         <section
           aria-labelledby="recent-activity-heading"
-          className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+          className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-blue-400" />
+              <Activity className="w-4 h-4 text-indigo-500" />
               <h3
                 id="recent-activity-heading"
-                className="text-xs font-semibold uppercase tracking-wider text-slate-200"
+                className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100"
               >
                 Recent Operational Activity
               </h3>
             </div>
-            <span className="text-[11px] text-slate-500">Latest Transacted Events</span>
+            <span className="text-[11px] text-slate-500 font-medium">Real-time transacted events</span>
           </div>
 
           {data.recentActivity.length === 0 ? (
-            <div className="py-6 text-center text-xs text-slate-400">
-              No recent operational events recorded.
+            <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
+              No recent operational events recorded in this period.
             </div>
           ) : (
-            <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 overflow-hidden bg-slate-900/40">
-              {data.recentActivity.map((event: DashboardActivityItem) => {
-                const isSale = event.type === "SALE";
-                const isReturn = event.type === "SALE_RETURN";
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+                <thead className="bg-slate-100/80 dark:bg-slate-850 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="p-3.5">Activity</th>
+                    <th className="p-3.5">Branch</th>
+                    <th className="p-3.5">Amount</th>
+                    <th className="p-3.5">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-[#0f172a]">
+                  {data.recentActivity.map((event: DashboardActivityItem) => {
+                    const isSale = event.type === "SALE";
+                    const isReturn = event.type === "SALE_RETURN";
 
-                return (
-                  <div
-                    key={event.id}
-                    className="p-3 flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className={`p-1.5 rounded-lg border shrink-0 ${
-                          isSale
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                            : isReturn
-                            ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                            : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                        }`}
-                      >
-                        {isSale ? (
-                          <ShoppingBag className="w-4 h-4" />
-                        ) : isReturn ? (
-                          <RotateCcw className="w-4 h-4" />
-                        ) : (
-                          <Boxes className="w-4 h-4" />
-                        )}
-                      </span>
-
-                      <div className="min-w-0">
-                        <div className="font-medium text-white truncate">
-                          {event.title}
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate">
-                          {event.description} •{" "}
-                          <span className="text-slate-500">
-                            {event.branchName} ({event.branchCode})
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      {event.amount && (
-                        <div
-                          className={`font-semibold ${
-                            isReturn ? "text-rose-400" : "text-emerald-400"
-                          }`}
-                        >
-                          {isReturn ? "-" : ""}
-                          {formatCurrencyAmount(event.amount, data.currency)}
-                        </div>
-                      )}
-                      <div className="text-[10px] text-slate-500">
-                        {formatActivityTime(event.timestamp, data.timezone)}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    return (
+                      <tr key={event.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`p-2 rounded-xl shrink-0 ${
+                                isSale
+                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                  : isReturn
+                                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                                  : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                              }`}
+                            >
+                              {isSale ? (
+                                <ShoppingBag className="w-4 h-4" />
+                              ) : isReturn ? (
+                                <RotateCcw className="w-4 h-4" />
+                              ) : (
+                                <Boxes className="w-4 h-4" />
+                              )}
+                            </span>
+                            <div>
+                              <div className="font-semibold text-slate-900 dark:text-white">
+                                {event.title}
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                {event.description}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3.5 font-medium text-slate-600 dark:text-slate-300">
+                          {event.branchName} <span className="text-slate-400 text-[11px]">({event.branchCode})</span>
+                        </td>
+                        <td className="p-3.5">
+                          {event.amount ? (
+                            <span
+                              className={`font-bold ${
+                                isReturn
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              {isReturn ? "-" : "+"}
+                              {formatCurrencyAmount(event.amount, data.currency)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="p-3.5 text-slate-500 text-[11px]">
+                          {formatActivityTime(event.timestamp, data.timezone)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
 
-        {/* Step 19C: Branch Performance Comparison (Owner/Accountant/Multi-branch Manager) */}
+        {/* Branch Performance Comparison (Consolidated View) */}
         {data.branchSummaries &&
           data.branchSummaries.length > 1 &&
           !data.selectedBranch && (
             <section
               aria-labelledby="branch-comparison-heading"
-              className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+              className="bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-emerald-400" />
+                  <Store className="w-4 h-4 text-emerald-500" />
                   <h3
                     id="branch-comparison-heading"
-                    className="text-xs font-semibold uppercase tracking-wider text-slate-200"
+                    className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100"
                   >
-                    Branch Performance Comparison
+                    Consolidated Branch Performance
                   </h3>
                 </div>
                 <span className="text-[11px] text-slate-500">
-                  Consolidated View Across {data.branchSummaries.length} Branches
+                  Consolidated across {data.branchSummaries.length} branch locations
                 </span>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-slate-800/80">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-slate-900/80 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+                  <thead className="bg-slate-100/80 dark:bg-slate-850 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="p-3">Branch</th>
-                      {!isInventoryManager && <th className="p-3">Gross Sales</th>}
-                      {!isInventoryManager && <th className="p-3">Net Sales</th>}
-                      {!isInventoryManager && <th className="p-3">Orders</th>}
-                      <th className="p-3">Low Stock Alerts</th>
+                      <th className="p-3.5">Branch Location</th>
+                      {!isInventoryManager && <th className="p-3.5">Gross Sales</th>}
+                      {!isInventoryManager && <th className="p-3.5">Net Sales</th>}
+                      {!isInventoryManager && <th className="p-3.5">Orders</th>}
+                      <th className="p-3.5">Stock Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-[#0f172a]">
                     {data.branchSummaries.map((b: DashboardBranchSummary) => (
-                      <tr key={b.id} className="hover:bg-slate-900/30 transition-colors">
-                        <td className="p-3 font-medium text-white">
+                      <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="p-3.5 font-semibold text-slate-900 dark:text-white">
                           {b.name}{" "}
                           <span className="text-slate-500 text-[11px]">({b.code})</span>
                         </td>
                         {!isInventoryManager && (
-                          <td className="p-3 font-semibold text-emerald-400">
+                          <td className="p-3.5 font-bold text-emerald-600 dark:text-emerald-400">
                             {formatCurrencyAmount(b.grossRevenue, data.currency)}
                           </td>
                         )}
                         {!isInventoryManager && (
-                          <td className="p-3 font-semibold text-white">
+                          <td className="p-3.5 font-bold text-slate-900 dark:text-white">
                             {formatCurrencyAmount(b.netSalesRevenue, data.currency)}
                           </td>
                         )}
                         {!isInventoryManager && (
-                          <td className="p-3 text-slate-300 font-medium">
+                          <td className="p-3.5 text-slate-600 dark:text-slate-300 font-medium">
                             {b.completedOrderCount?.toLocaleString() ?? 0}
                           </td>
                         )}
-                        <td className="p-3">
+                        <td className="p-3.5">
                           {b.lowStockCount && b.lowStockCount > 0 ? (
-                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              {b.lowStockCount} items
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                              {b.lowStockCount} low items
                             </span>
                           ) : (
-                            <span className="text-slate-500 text-[11px]">0</span>
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              All optimal
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -1183,23 +1071,7 @@ export function DashboardView({
               </div>
             </section>
           )}
-
-        {/* Empty State Banner (when no sales and no stock alerts) */}
-        {!isInventoryManager &&
-          data.salesMetrics &&
-          data.salesMetrics.completedOrderCount === 0 &&
-          data.inventoryMetrics.lowStockCount === 0 &&
-          data.inventoryMetrics.outOfStockCount === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-8 text-center space-y-2">
-              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-              <h3 className="text-sm font-semibold text-white">Quiet Reporting Window</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                No orders have been fulfilled during this date range and all inventory stock levels
-                are within nominal operating thresholds.
-              </p>
-            </div>
-          )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

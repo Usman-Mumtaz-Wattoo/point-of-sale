@@ -21,6 +21,7 @@ import {
   HelpCircle,
   FileText,
 } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
 import {
   getSaleReturnableInfoAction,
   createSaleReturnAction,
@@ -337,42 +338,39 @@ export function ReturnsView({
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
-      {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/dashboard?org=${organizationId}`}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Return to Dashboard"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                  <RotateCcw className="w-5 h-5 text-amber-400" />
-                  Sales Returns & Refunds
-                </h1>
-                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  {organizationName}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">
-                Operator: <span className="text-slate-300 font-medium">{userName}</span> ({userRole})
-              </p>
+    <AppShell
+      userRole={userRole}
+      userName={userName}
+      organizationName={organizationName}
+      organizationId={organizationId}
+      activePath="/sales"
+    >
+      <div className="space-y-6">
+        {/* Top Header & Tab Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-amber-500 dark:text-amber-400" />
+                Sales Returns & Refunds
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20">
+                {userRole}
+              </span>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Process customer merchandise returns, restock inventory items, and issue payment refunds.
+            </p>
           </div>
 
           {/* Tab Switcher */}
-          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
             <button
               onClick={() => setActiveTab("process")}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "process"
-                  ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700/80"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -383,10 +381,10 @@ export function ReturnsView({
                 setActiveTab("history");
                 fetchHistory(1);
               }}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "history"
-                  ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700/80"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
               <History className="w-3.5 h-3.5" />
@@ -394,10 +392,6 @@ export function ReturnsView({
             </button>
           </div>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* =================================================================== */}
         {/* TAB 1: PROCESS RETURN */}
         {/* =================================================================== */}
@@ -1032,7 +1026,6 @@ export function ReturnsView({
             </div>
           </div>
         )}
-      </main>
 
       {/* =================================================================== */}
       {/* CONFIRMATION MODAL */}
@@ -1339,6 +1332,7 @@ export function ReturnsView({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </AppShell>
   );
 }

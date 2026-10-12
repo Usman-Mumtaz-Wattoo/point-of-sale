@@ -9,6 +9,7 @@ import {
 import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
 import { db } from "@/lib/db";
 import { resolveTenantContext, TenantContextError } from "@/lib/tenant-context";
+import { AppShell } from "@/components/app-shell";
 import { CustomerView } from "./customer-view";
 
 export const metadata = {
@@ -47,30 +48,30 @@ export default async function CustomersPage(props: CustomersPageProps) {
         );
 
         return (
-          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-            <div className="max-w-xl mx-auto bg-slate-950 border border-slate-800 rounded-xl p-8 space-y-6">
+          <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 p-6 md:p-12 flex items-center justify-center">
+            <div className="w-full max-w-xl bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-8 space-y-6 shadow-sm">
               <div className="text-center space-y-2">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto text-xl border border-emerald-500/20">
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto text-xl border border-indigo-200 dark:border-indigo-500/20">
                   🏢
                 </div>
-                <h1 className="text-xl font-bold text-white">Select Business</h1>
-                <p className="text-sm text-slate-400">
+                <h1 className="text-xl font-bold text-slate-900 dark:text-white">Select Business</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   You have access to multiple businesses. Please choose which business customers to manage.
                 </p>
               </div>
 
-              <div className="divide-y divide-slate-800 border border-slate-800 rounded-lg overflow-hidden">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden">
                 {eligibleMemberships.map((m) => (
                   <Link
                     key={m.organizationId}
                     href={`/customers?org=${m.organizationId}`}
-                    className="flex items-center justify-between p-4 hover:bg-slate-900/60 transition-colors"
+                    className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                   >
                     <div>
-                      <div className="text-sm font-medium text-white">{m.organization.name}</div>
-                      <div className="text-xs text-slate-400 capitalize">Role: {m.role.name.toLowerCase()}</div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">{m.organization.name}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 capitalize">Role: {m.role.name.toLowerCase()}</div>
                     </div>
-                    <span className="text-xs text-emerald-400 font-semibold">&rarr;</span>
+                    <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">&rarr;</span>
                   </Link>
                 ))}
               </div>
@@ -78,7 +79,7 @@ export default async function CustomersPage(props: CustomersPageProps) {
               <div className="text-center pt-2">
                 <Link
                   href="/dashboard"
-                  className="text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                  className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-400 transition-colors"
                 >
                   &larr; Back to Dashboard
                 </Link>
@@ -90,19 +91,19 @@ export default async function CustomersPage(props: CustomersPageProps) {
 
       if (err.code === "NO_ACTIVE_MEMBERSHIP") {
         return (
-          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-              <div className="w-12 h-12 rounded-full bg-slate-900 text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-800">
+          <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 p-6 md:p-12 flex items-center justify-center">
+            <div className="w-full max-w-xl mx-auto text-center bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-10 space-y-4 shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center mx-auto text-xl border border-slate-200 dark:border-slate-700">
                 🏢
               </div>
-              <h1 className="text-xl font-bold text-white">No Active Business Found</h1>
-              <p className="text-sm text-slate-400 max-w-md mx-auto">
+              <h1 className="text-xl font-bold text-slate-900 dark:text-white">No Active Business Found</h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                 You must belong to an active organization to access Customer Management.
               </p>
               <div className="pt-2">
                 <Link
                   href="/onboarding"
-                  className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
+                  className="inline-flex items-center px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-colors shadow-sm"
                 >
                   Create Your Business &rarr;
                 </Link>
@@ -114,19 +115,19 @@ export default async function CustomersPage(props: CustomersPageProps) {
 
       if (err.code === "MEMBERSHIP_NOT_FOUND" || err.code === "INACTIVE_MEMBERSHIP") {
         return (
-          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-              <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto text-xl border border-amber-500/20">
+          <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 p-6 md:p-12 flex items-center justify-center">
+            <div className="w-full max-w-xl mx-auto text-center bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-10 space-y-4 shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto text-xl border border-amber-200 dark:border-amber-500/20">
                 ⚠️
               </div>
-              <h1 className="text-xl font-bold text-white">Business Unavailable</h1>
-              <p className="text-sm text-slate-400 max-w-md mx-auto">
+              <h1 className="text-xl font-bold text-slate-900 dark:text-white">Business Unavailable</h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                 {err.message}
               </p>
               <div className="pt-2">
                 <Link
                   href="/customers"
-                  className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                  className="inline-flex items-center px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
                 >
                   Choose Another Business
                 </Link>
@@ -138,19 +139,19 @@ export default async function CustomersPage(props: CustomersPageProps) {
 
       if (err.code === "UNAUTHORIZED_ROLE") {
         return (
-          <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-            <div className="max-w-3xl mx-auto text-center bg-slate-950 border border-slate-800 rounded-xl p-12 space-y-4">
-              <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-500/20">
+          <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 p-6 md:p-12 flex items-center justify-center">
+            <div className="w-full max-w-xl mx-auto text-center bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-10 space-y-4 shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto text-xl border border-rose-200 dark:border-rose-500/20">
                 🚫
               </div>
-              <h1 className="text-xl font-bold text-white">Access Denied</h1>
-              <p className="text-sm text-slate-400 max-w-md mx-auto">
+              <h1 className="text-xl font-bold text-slate-900 dark:text-white">Access Denied</h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                 Your role does not have permission to access Customer Management.
               </p>
               <div className="pt-2">
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                  className="inline-flex items-center px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
                 >
                   &larr; Return to Dashboard
                 </Link>
@@ -213,36 +214,34 @@ export default async function CustomersPage(props: CustomersPageProps) {
   );
 
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 p-6 md:p-12">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <AppShell
+      userRole={userRole}
+      userName={user.name}
+      organizationName={organization.name}
+      organizationId={organization.id}
+      activePath="/customers"
+    >
+      <div className="space-y-6">
         {/* Navigation & Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-slate-800 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-2 gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Link
-                href={`/dashboard?org=${organization.id}`}
-                className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
-              >
-                &larr; Dashboard
-              </Link>
-              <span className="text-slate-600 text-xs">•</span>
-              <span className="text-xs text-slate-400">Customer Management</span>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                Customer Directory
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20">
+                {userRole}
+              </span>
             </div>
-            <h1 className="text-2xl font-bold text-white">
-              {organization.name} — Customers
-            </h1>
-            <p className="text-xs text-slate-400">
-              Manage customer records, tax identifiers, and contact profiles across all branches.
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Manage client records, tax identifiers, contact profiles, and purchase histories across branches.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              Role: {userRole}
-            </span>
             <Link
               href={`/pos?org=${organization.id}`}
-              className="px-3 py-1.5 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-xs"
             >
               Go to POS &rarr;
             </Link>
@@ -268,6 +267,6 @@ export default async function CustomersPage(props: CustomersPageProps) {
           currentStatus={searchParams.status || "all"}
         />
       </div>
-    </main>
+    </AppShell>
   );
 }

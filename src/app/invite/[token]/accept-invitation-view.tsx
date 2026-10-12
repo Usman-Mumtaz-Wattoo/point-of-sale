@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { type PublicInvitationDetailDTO } from "@/app/settings/staff/types";
 import { acceptInvitationAction } from "@/app/settings/staff/actions";
+import { ThemeToggle } from "@/components/theme-provider";
 
 interface AcceptInvitationViewProps {
   token: string;
@@ -43,21 +44,24 @@ export function AcceptInvitationView({
   // If initial server verification failed (token invalid, expired, already accepted)
   if (initialError || !invitation) {
     return (
-      <main className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+      <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 transition-colors relative">
+        <div className="absolute top-6 right-6">
+          <ThemeToggle />
+        </div>
+        <div className="w-full max-w-md bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-8 shadow-xl space-y-6 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
             <XCircle className="w-8 h-8" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-xl font-bold tracking-tight text-white">Invitation Invalid</h1>
-            <p className="text-sm text-slate-400 leading-relaxed">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Invitation Invalid</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               {initialError || "This invitation link is invalid or has expired."}
             </p>
           </div>
           <div className="pt-2">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-sm transition-colors"
+              className="inline-flex items-center justify-center w-full px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-xs"
             >
               Sign In to Your Account
             </Link>
@@ -70,23 +74,26 @@ export function AcceptInvitationView({
   // If successfully accepted in this session
   if (isAccepted) {
     return (
-      <main className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-slate-950 border border-emerald-500/30 rounded-2xl p-8 shadow-2xl space-y-6 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+      <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 transition-colors relative">
+        <div className="absolute top-6 right-6">
+          <ThemeToggle />
+        </div>
+        <div className="w-full max-w-md bg-white dark:bg-[#0f172a] border border-emerald-300 dark:border-emerald-500/30 rounded-2xl p-8 shadow-xl space-y-6 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-xl font-bold tracking-tight text-white">Welcome Aboard!</h1>
-            <p className="text-sm text-slate-400 leading-relaxed">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Welcome Aboard!</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               You have successfully joined{" "}
-              <strong className="text-white">{invitation.organizationName}</strong> as a{" "}
-              <strong className="text-emerald-400">{invitation.roleName}</strong>.
+              <strong className="text-slate-900 dark:text-white">{invitation.organizationName}</strong> as a{" "}
+              <strong className="text-indigo-600 dark:text-indigo-400">{invitation.roleName}</strong>.
             </p>
           </div>
           <div className="pt-2">
             <Link
               href={acceptedOrgId ? `/dashboard?org=${acceptedOrgId}` : "/dashboard"}
-              className="inline-flex items-center justify-center w-full gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-all shadow-lg shadow-emerald-950/40"
+              className="inline-flex items-center justify-center w-full gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-xs"
             >
               <span>Go to Business Dashboard</span>
               <ArrowRight className="w-4 h-4" />
@@ -122,69 +129,73 @@ export function AcceptInvitationView({
   };
 
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
+    <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 transition-colors relative">
+      <div className="absolute top-6 right-6">
+        <ThemeToggle />
+      </div>
+
+      <div className="w-full max-w-lg bg-white dark:bg-[#0f172a] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-8 shadow-xl space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
             <Building2 className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Staff Invitation</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Staff Invitation</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             You have been invited to join an organization on Point of Sale.
           </p>
         </div>
 
         {/* Action Error Banner */}
         {actionError && (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm">
-            <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-200 text-xs font-medium">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
             <span>{actionError}</span>
           </div>
         )}
 
         {/* Invitation Summary Card */}
-        <div className="bg-slate-900/90 border border-slate-800/80 rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <span className="text-xs uppercase tracking-wider text-slate-400 font-medium">
+        <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 pb-3">
+            <span className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
               Organization
             </span>
-            <span className="text-sm font-semibold text-white">{invitation.organizationName}</span>
+            <span className="text-sm font-semibold text-slate-900 dark:text-white">{invitation.organizationName}</span>
           </div>
 
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <span className="text-xs uppercase tracking-wider text-slate-400 font-medium">
+          <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 pb-3">
+            <span className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
               Assigned Role
             </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400">
               <ShieldCheck className="w-3.5 h-3.5" />
               {invitation.roleName}
             </span>
           </div>
 
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <span className="text-xs uppercase tracking-wider text-slate-400 font-medium">
+          <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 pb-3">
+            <span className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
               Invited Email
             </span>
-            <span className="text-sm font-mono text-slate-300 flex items-center gap-1.5">
+            <span className="text-xs font-mono text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
               <Mail className="w-3.5 h-3.5 text-slate-400" />
               {invitation.email}
             </span>
           </div>
 
-          <div className="flex items-start justify-between border-b border-slate-800 pb-3">
-            <span className="text-xs uppercase tracking-wider text-slate-400 font-medium pt-0.5">
+          <div className="flex items-start justify-between border-b border-slate-200/80 dark:border-slate-800 pb-3">
+            <span className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold pt-0.5">
               Branch Access
             </span>
             <div className="text-right">
               {invitation.branches.length === 0 ? (
-                <span className="text-xs text-slate-400">All Authorized Branches</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 italic">All Authorized Branches</span>
               ) : (
                 <div className="flex flex-wrap justify-end gap-1.5 max-w-[240px]">
                   {invitation.branches.map((b) => (
                     <span
                       key={b.branchCode}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 border border-slate-700 text-slate-300"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
                     >
                       <MapPin className="w-3 h-3 text-slate-400" />
                       {b.branchName}
@@ -195,7 +206,7 @@ export function AcceptInvitationView({
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" />
               Expires:
@@ -207,23 +218,23 @@ export function AcceptInvitationView({
         {/* State 1: Unauthenticated */}
         {!currentUser && (
           <div className="space-y-4 pt-1">
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs leading-relaxed">
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs leading-relaxed font-medium">
               To accept this invitation and join{" "}
-              <strong className="text-amber-200">{invitation.organizationName}</strong>, please sign
+              <strong className="text-amber-900 dark:text-white font-semibold">{invitation.organizationName}</strong>, please sign
               in or register with your invited email:{" "}
-              <strong className="text-white underline">{invitation.email}</strong>.
+              <strong className="underline">{invitation.email}</strong>.
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <Link
                 href={`/login?redirectTo=/invite/${token}`}
-                className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors shadow-xs text-center"
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-xs text-center"
               >
                 Sign In
               </Link>
               <Link
                 href={`/signup?email=${encodeURIComponent(invitation.email)}&redirectTo=/invite/${token}`}
-                className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-sm transition-colors text-center border border-slate-700"
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors text-center border border-slate-200 dark:border-slate-700"
               >
                 Create Account
               </Link>
@@ -234,18 +245,18 @@ export function AcceptInvitationView({
         {/* State 2: Authenticated with Email Mismatch */}
         {currentUser && !isEmailMatch && (
           <div className="space-y-4 pt-1">
-            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs space-y-2">
-              <div className="flex items-center gap-2 font-semibold text-rose-200">
-                <AlertTriangle className="w-4 h-4 text-rose-400" />
+            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-200 text-xs space-y-2">
+              <div className="flex items-center gap-2 font-semibold text-rose-900 dark:text-rose-100">
+                <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                 Email Mismatch Detected
               </div>
               <p>
                 You are currently signed in as{" "}
-                <strong className="text-white">{currentUser.email}</strong>.
+                <strong className="text-slate-900 dark:text-white">{currentUser.email}</strong>.
               </p>
               <p>
                 However, this invitation was specifically issued to{" "}
-                <strong className="text-white">{invitation.email}</strong>. For security reasons,
+                <strong className="text-slate-900 dark:text-white">{invitation.email}</strong>. For security reasons,
                 invitations can only be accepted by their designated recipient.
               </p>
             </div>
@@ -254,14 +265,14 @@ export function AcceptInvitationView({
               <form action="/auth/signout" method="post">
                 <button
                   type="submit"
-                  className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-sm transition-colors border border-slate-700"
+                  className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors border border-slate-200 dark:border-slate-700"
                 >
                   Sign Out to Switch Accounts
                 </button>
               </form>
               <Link
                 href="/dashboard"
-                className="text-center text-xs text-slate-400 hover:text-slate-300 transition-colors py-1"
+                className="text-center text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors py-1"
               >
                 &larr; Return to Dashboard
               </Link>
@@ -272,11 +283,11 @@ export function AcceptInvitationView({
         {/* State 3: Authenticated with Matching Email */}
         {currentUser && isEmailMatch && (
           <div className="space-y-4 pt-1">
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2.5">
-              <UserCheck className="w-4 h-4 shrink-0 text-emerald-400" />
+            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2.5 font-medium">
+              <UserCheck className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
               <span>
                 Verified identity: Signed in as{" "}
-                <strong className="text-white">{currentUser.email}</strong>
+                <strong className="text-slate-900 dark:text-white">{currentUser.email}</strong>
               </span>
             </div>
 
@@ -284,7 +295,7 @@ export function AcceptInvitationView({
               type="button"
               onClick={handleAccept}
               disabled={isPending}
-              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-sm transition-all shadow-lg shadow-emerald-950/40 cursor-pointer"
+              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs transition-all shadow-xs cursor-pointer"
             >
               {isPending ? (
                 <>

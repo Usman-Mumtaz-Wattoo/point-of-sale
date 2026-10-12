@@ -1,35 +1,44 @@
+import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-provider";
+
 export default function HomePage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-slate-900 text-slate-100">
-      <div className="max-w-md w-full rounded-xl border border-slate-800 bg-slate-950/70 p-8 shadow-2xl backdrop-blur text-center space-y-4">
-        <div className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          Ready for Development
+    <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-white transition-colors relative">
+      <div className="absolute top-6 right-6">
+        <ThemeToggle />
+      </div>
+
+      <div className="max-w-md w-full rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0f172a] p-8 shadow-xl text-center space-y-5">
+        <div className="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20">
+          Point of Sale & Inventory SaaS
         </div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">
-          Point of Sale SaaS
-        </h1>
-        <p className="text-sm text-slate-400">
-          Foundation initialized successfully.
-        </p>
-        <div className="pt-4 flex items-center justify-center gap-3">
-          <a
+        <div className="space-y-1.5">
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Retail POS Platform
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Multi-branch retail registers, real-time inventory management, sales orders, and analytical dashboards.
+          </p>
+        </div>
+        <div className="pt-2 flex items-center justify-center gap-3">
+          <Link
             href="/login"
-            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors shadow-xs"
           >
             Sign In
-          </a>
-          <a
+          </Link>
+          <Link
             href="/signup"
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+            className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
           >
-            Sign Up
-          </a>
-          <a
+            Create Account
+          </Link>
+          <Link
             href="/dashboard"
-            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium border border-slate-800 transition-colors"
+            className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
           >
             Dashboard
-          </a>
+          </Link>
         </div>
       </div>
     </main>

@@ -112,20 +112,20 @@ function InviteModalContent({
       role="dialog"
       aria-modal="true"
       aria-labelledby="invite-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto"
     >
-      <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8">
+      <div className="w-full max-w-lg bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm font-semibold border border-emerald-100">
+        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-base font-semibold border border-indigo-200 dark:border-indigo-500/20">
               ✉️
             </span>
             <div>
-              <h2 id="invite-modal-title" className="text-base font-semibold text-slate-900">
+              <h2 id="invite-modal-title" className="text-base font-semibold text-slate-900 dark:text-white">
                 Invite Staff Member
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Send an invitation to join your business with a specific operational role.
               </p>
             </div>
@@ -135,7 +135,7 @@ function InviteModalContent({
             type="button"
             onClick={onClose}
             disabled={isPending}
-            className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-sm transition-colors disabled:opacity-50"
+            className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-sm transition-colors disabled:opacity-50"
           >
             ✕
           </button>
@@ -144,44 +144,44 @@ function InviteModalContent({
         {/* Modal Content */}
         {generatedInviteUrl ? (
           <div className="p-6 space-y-4">
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center space-y-2">
-              <span className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-lg font-bold">
+            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-center space-y-2">
+              <span className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 flex items-center justify-center mx-auto text-lg font-bold">
                 ✓
               </span>
-              <h3 className="text-sm font-bold text-emerald-900">Invitation Created!</h3>
-              <p className="text-xs text-emerald-700 max-w-sm mx-auto">
+              <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">Invitation Created!</h3>
+              <p className="text-xs text-emerald-700 dark:text-emerald-300 max-w-sm mx-auto">
                 An invitation has been created for <strong className="font-semibold">{email}</strong>.
                 Share the secure invitation link below with your employee:
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700">Invitation Link</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">Invitation Link</label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   readOnly
                   value={`${typeof window !== "undefined" ? window.location.origin : ""}${generatedInviteUrl}`}
-                  className="w-full px-3 py-2 text-xs font-mono bg-slate-50 rounded-lg border border-slate-300 text-slate-700 select-all"
+                  className="w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 select-all"
                 />
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="px-3.5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs transition-colors shrink-0"
+                  className="px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-xs transition-colors shrink-0"
                 >
                   {copied ? "Copied! ✓" : "Copy Link"}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
                 This single-use link expires in 7 days. The employee will sign in and accept it.
               </p>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors"
+                className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors"
               >
                 Done
               </button>
@@ -193,15 +193,15 @@ function InviteModalContent({
               {modalError && (
                 <div
                   role="alert"
-                  className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium"
+                  className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-200 text-xs font-medium"
                 >
                   {modalError}
                 </div>
               )}
 
               {/* Email Address */}
-              <div className="space-y-1">
-                <label htmlFor="invite-email" className="block text-xs font-semibold text-slate-700">
+              <div className="space-y-1.5">
+                <label htmlFor="invite-email" className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Staff Email Address <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -212,29 +212,29 @@ function InviteModalContent({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="e.g. employee@company.com"
-                  className={`w-full px-3 py-2 text-sm rounded-lg border text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 transition-colors ${
+                  className={`w-full px-3.5 py-2 text-sm rounded-xl border bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors ${
                     fieldErrors.email
-                      ? "border-rose-300 focus:ring-rose-500/20"
-                      : "border-slate-300 focus:border-emerald-500 focus:ring-emerald-500/20"
+                      ? "border-rose-300 dark:border-rose-600 focus:ring-rose-500/20"
+                      : "border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/20"
                   }`}
                 />
                 {fieldErrors.email && (
-                  <p role="alert" className="text-[11px] text-rose-600 font-medium">
+                  <p role="alert" className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
                     {fieldErrors.email}
                   </p>
                 )}
               </div>
 
               {/* Role Selection */}
-              <div className="space-y-1">
-                <label htmlFor="invite-role" className="block text-xs font-semibold text-slate-700">
+              <div className="space-y-1.5">
+                <label htmlFor="invite-role" className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Assigned Operational Role <span className="text-rose-500">*</span>
                 </label>
                 <select
                   id="invite-role"
                   value={roleName}
                   onChange={(e) => setRoleName(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-colors"
                 >
                   {ASSIGNABLE_STAFF_ROLES.map((r) => {
                     const def = SYSTEM_ROLE_DEFINITIONS.find((d) => d.name === r);
@@ -245,18 +245,18 @@ function InviteModalContent({
                     );
                   })}
                 </select>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">
                   Organization OWNER role cannot be assigned through staff invitations.
                 </p>
               </div>
 
               {/* Branch Scope Checkboxes */}
               {branches.length > 0 && (
-                <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                  <label className="block text-xs font-semibold text-slate-700">
+                <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Assign Branches (Optional)
                   </label>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Select which retail store locations this staff member can operate:
                   </p>
 
@@ -266,21 +266,21 @@ function InviteModalContent({
                       return (
                         <label
                           key={b.id}
-                          className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                          className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
                             isChecked
-                              ? "bg-emerald-50/60 border-emerald-300 text-slate-900"
-                              : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100/60"
+                              ? "bg-indigo-50/60 dark:bg-indigo-950/30 border-indigo-300 dark:border-indigo-700/60 text-slate-900 dark:text-white"
+                              : "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60"
                           }`}
                         >
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => handleBranchToggle(b.id)}
-                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           />
                           <div className="truncate">
                             <span className="font-semibold block truncate">{b.name}</span>
-                            <span className="text-[10px] font-mono text-slate-400">{b.code}</span>
+                            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">{b.code}</span>
                           </div>
                         </label>
                       );
@@ -291,19 +291,19 @@ function InviteModalContent({
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isPending}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isPending}
-                className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-xs transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {isPending && (
                   <span className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />

@@ -70,10 +70,10 @@ export function SalesTable({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0f172a] overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-900/80 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+          <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
+            <thead className="bg-slate-50/80 dark:bg-slate-900/80 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th scope="col" className="px-4 py-3.5">
                   Invoice / Receipt
@@ -107,7 +107,7 @@ export function SalesTable({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-normal">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-normal">
               {sales.map((sale) => {
                 const isVoided = sale.status === "VOIDED";
                 const isPaid = sale.paymentStatus === "PAID";
@@ -119,24 +119,24 @@ export function SalesTable({
                     onClick={() => onSelectSale?.(sale.id)}
                     className={`transition-colors cursor-pointer ${
                       isVoided
-                        ? "bg-rose-950/10 hover:bg-rose-950/20 text-slate-400"
-                        : "hover:bg-slate-900/60"
+                        ? "bg-rose-50/50 dark:bg-rose-950/10 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-slate-400"
+                        : "hover:bg-slate-50/80 dark:hover:bg-slate-900/60"
                     }`}
                   >
                     {/* Invoice & Receipt # */}
                     <td className="px-4 py-3.5 font-mono">
                       <div className="flex items-center gap-1.5">
-                        <Receipt className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <Receipt className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                         <span
                           className={`font-semibold ${
-                            isVoided ? "line-through text-rose-300" : "text-white"
+                            isVoided ? "line-through text-rose-500 dark:text-rose-300" : "text-slate-900 dark:text-white"
                           }`}
                         >
                           {sale.invoiceNumber}
                         </span>
                       </div>
                       {sale.receiptNumber && (
-                        <div className="text-[10px] text-slate-500 mt-0.5 pl-5">
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 pl-5">
                           Rcpt: {sale.receiptNumber}
                         </div>
                       )}
@@ -144,8 +144,8 @@ export function SalesTable({
 
                     {/* Date & Time */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 text-slate-300">
-                        <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                         <span>{formatDateTime(sale.saleDate, timeZone)}</span>
                       </div>
                     </td>
@@ -154,42 +154,42 @@ export function SalesTable({
                     <td className="px-4 py-3.5">
                       {sale.customer ? (
                         <div>
-                          <div className="font-medium text-slate-200 flex items-center gap-1">
+                          <div className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1">
                             <User className="w-3 h-3 text-slate-400 shrink-0" />
                             <span>{sale.customer.name}</span>
                           </div>
                           {sale.customer.phone && (
-                            <div className="text-[10px] text-slate-500 pl-4">
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 pl-4">
                               {sale.customer.phone}
                             </div>
                           )}
                         </div>
                       ) : (
-                        <span className="text-slate-500 italic">Walk-in Customer</span>
+                        <span className="text-slate-400 dark:text-slate-500 italic">Walk-in Customer</span>
                       )}
                     </td>
 
                     {/* Branch */}
                     <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-1 text-slate-300">
-                        <Store className="w-3 h-3 text-slate-500 shrink-0" />
-                        <span className="font-medium text-slate-200">{sale.branch.name}</span>
+                      <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                        <Store className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{sale.branch.name}</span>
                       </div>
-                      <span className="text-[10px] text-slate-500 pl-4">{sale.branch.code}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 pl-4">{sale.branch.code}</span>
                     </td>
 
                     {/* Cashier */}
-                    <td className="px-4 py-3.5 text-slate-300">
+                    <td className="px-4 py-3.5 text-slate-600 dark:text-slate-300">
                       {sale.cashier ? (
                         <span>{sale.cashier.name}</span>
                       ) : (
-                        <span className="text-slate-500">—</span>
+                        <span className="text-slate-400 dark:text-slate-500">—</span>
                       )}
                     </td>
 
                     {/* Items Count */}
-                    <td className="px-4 py-3.5 text-center font-mono text-slate-300">
-                      <span className="inline-block px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-xs">
+                    <td className="px-4 py-3.5 text-center font-mono text-slate-600 dark:text-slate-300">
+                      <span className="inline-block px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs">
                         {sale.itemCount}
                       </span>
                     </td>
@@ -198,13 +198,13 @@ export function SalesTable({
                     <td className="px-4 py-3.5 text-right font-mono font-medium whitespace-nowrap">
                       <span
                         className={`text-sm ${
-                          isVoided ? "line-through text-slate-400" : "text-emerald-400"
+                          isVoided ? "line-through text-slate-400" : "text-indigo-600 dark:text-emerald-400 font-semibold"
                         }`}
                       >
                         {formatCurrency(sale.totalAmount, currency)}
                       </span>
                       {parseFloat(sale.discountAmount || "0") > 0 && (
-                        <div className="text-[10px] text-amber-400/80">
+                        <div className="text-[10px] text-amber-600 dark:text-amber-400/80">
                           Disc: -{formatCurrency(sale.discountAmount, currency)}
                         </div>
                       )}
@@ -213,17 +213,17 @@ export function SalesTable({
                     {/* Payment Status */}
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">
                       {isPaid ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
                           <CreditCard className="w-2.5 h-2.5" />
                           PAID
                         </span>
                       ) : isPartial ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
                           <CreditCard className="w-2.5 h-2.5" />
                           PARTIAL
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20">
                           <CreditCard className="w-2.5 h-2.5" />
                           UNPAID
                         </span>
@@ -233,11 +233,11 @@ export function SalesTable({
                     {/* Sale Status */}
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">
                       {isVoided ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30">
                           VOIDED
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20">
                           COMPLETED
                         </span>
                       )}
@@ -251,10 +251,10 @@ export function SalesTable({
                           e.stopPropagation();
                           onSelectSale?.(sale.id);
                         }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors cursor-pointer text-[11px]"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800 transition-colors cursor-pointer text-[11px]"
                         title="View Sale Details"
                       >
-                        <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                        <Eye className="w-3.5 h-3.5 text-indigo-600 dark:text-emerald-400" />
                         <span>View</span>
                       </button>
                     </td>
@@ -267,11 +267,11 @@ export function SalesTable({
       </div>
 
       {/* Pagination Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1 text-xs text-slate-400">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1 text-xs text-slate-500 dark:text-slate-400">
         <div>
-          Showing <span className="font-semibold text-slate-200">{startItem}</span> to{" "}
-          <span className="font-semibold text-slate-200">{endItem}</span> of{" "}
-          <span className="font-semibold text-slate-200">{totalItems}</span> sales
+          Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{startItem}</span> to{" "}
+          <span className="font-semibold text-slate-800 dark:text-slate-200">{endItem}</span> of{" "}
+          <span className="font-semibold text-slate-800 dark:text-slate-200">{totalItems}</span> sales
         </div>
 
         <div className="flex items-center gap-2">
@@ -280,13 +280,13 @@ export function SalesTable({
             disabled={page <= 1 || isLoading}
             onClick={() => onPageChange(page - 1)}
             aria-label="Previous page"
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4" />
             <span>Previous</span>
           </button>
 
-          <span className="px-2 font-mono text-slate-300">
+          <span className="px-2 font-mono text-slate-700 dark:text-slate-300">
             Page {page} of {Math.max(1, totalPages)}
           </span>
 
@@ -295,7 +295,7 @@ export function SalesTable({
             disabled={page >= totalPages || isLoading}
             onClick={() => onPageChange(page + 1)}
             aria-label="Next page"
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
           >
             <span>Next</span>
             <ChevronRight className="w-4 h-4" />
