@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 import { createClient } from "./supabase/server";
@@ -10,8 +11,9 @@ import { claimPendingInvitationsForUser } from "./invitation-claim";
  *
  * Uses `supabase.auth.getUser()` which strictly validates the session token
  * with Supabase Auth, avoiding unverified client-side session tampering.
+ * Wrapped in React `cache()` for per-request deduplication.
  */
-export async function getCurrentAuthUser(): Promise<SupabaseAuthUser | null> {
+export const getCurrentAuthUser = cache(async function getCurrentAuthUser(): Promise<SupabaseAuthUser | null> {
   try {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.getUser();
@@ -24,10 +26,12 @@ export async function getCurrentAuthUser(): Promise<SupabaseAuthUser | null> {
   } catch {
     return null;
   }
-}
+});
 
 /**
  * Resolves the authenticated Supabase user to our internal Prisma User record.
+ * Wrapped in React `cache()` for per-request deduplication.
+ * Accepts optional pre-resolved authUser to eliminate redundant network calls.
  *
  * CRITICAL IDENTITY-LINKING SECURITY RULES:
  * 1. Look up existing application User strictly by `supabaseAuthId`.
@@ -43,8 +47,10 @@ export async function getCurrentAuthUser(): Promise<SupabaseAuthUser | null> {
  *      application User record with `supabaseAuthId = authUser.id`.
  * 4. NEVER create an Organization or assign roles automatically.
  */
-export async function getCurrentAppUser() {
-  const authUser = await getCurrentAuthUser();
+export const getCurrentAppUser = cache(async function getCurrentAppUser(
+  preResolvedAuthUser?: SupabaseAuthUser | null
+) {
+  const authUser = preResolvedAuthUser !== undefined ? preResolvedAuthUser : await getCurrentAuthUser();
   if (!authUser || !authUser.email) {
     return null;
   }
@@ -220,7 +226,7 @@ export async function getCurrentAppUser() {
 
     throw error;
   }
-}
+});
 
 /**
  * Enforces server-side authentication.

@@ -173,7 +173,11 @@ export default async function DashboardPage(props: DashboardPageProps) {
   }
 
   // Server-side initial data fetch via secure action with verified organization context
-  const initialMetricsRes = await getDashboardMetricsAction(undefined, tenantContext.organizationId);
+  const initialMetricsRes = await getDashboardMetricsAction(
+    undefined,
+    tenantContext.organizationId,
+    { actorUser: user }
+  );
 
   if (!initialMetricsRes.success || !initialMetricsRes.data) {
     return (

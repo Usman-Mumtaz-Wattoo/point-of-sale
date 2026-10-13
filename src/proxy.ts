@@ -37,8 +37,11 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // Refresh auth tokens if expired. Does not log tokens.
-  await supabase.auth.getUser();
+  // Refresh auth tokens if session cookies exist. Avoids unnecessary remote auth calls for guest requests.
+  const hasAuthCookies = request.cookies.getAll().some((c) => c.name.startsWith("sb-"));
+  if (hasAuthCookies) {
+    await supabase.auth.getUser();
+  }
 
   return response;
 }

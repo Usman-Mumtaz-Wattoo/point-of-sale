@@ -25,7 +25,7 @@ export async function loginAction(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
@@ -34,8 +34,8 @@ export async function loginAction(
     return { error: error.message };
   }
 
-  // Load application user to resolve memberships and claim any pending invitations
-  const appUser = await getCurrentAppUser();
+  // Load application user with pre-resolved auth user to eliminate duplicate Supabase Auth roundtrip
+  const appUser = await getCurrentAppUser(data.user);
 
   // Validate redirectTo path against open redirect vulnerabilities
   if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {

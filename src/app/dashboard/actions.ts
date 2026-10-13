@@ -819,7 +819,7 @@ export async function getDashboardMetricsAction(
               product: { select: { name: true, sku: true } },
               variant: { select: { name: true, sku: true } },
             },
-            take: 1000,
+            take: 200,
           }),
 
       // Query 8: Recent Activity
