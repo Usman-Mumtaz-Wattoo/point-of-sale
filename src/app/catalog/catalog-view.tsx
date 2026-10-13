@@ -24,8 +24,8 @@ interface ProductVariantItem {
   name: string;
   sku: string | null;
   barcode: string | null;
-  costPrice: unknown;
-  sellingPrice: unknown;
+  costPrice: string | number | null;
+  sellingPrice: string | number | null;
   isActive: boolean;
 }
 
@@ -38,8 +38,8 @@ interface ProductItem {
   brand: string | null;
   imageUrl?: string | null;
   unit: string;
-  costPrice: unknown;
-  sellingPrice: unknown;
+  costPrice: string | number | null;
+  sellingPrice: string | number | null;
   isActive: boolean;
   category: { id: string; name: string } | null;
   variants: ProductVariantItem[];

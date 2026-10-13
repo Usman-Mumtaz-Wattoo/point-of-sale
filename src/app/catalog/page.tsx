@@ -167,6 +167,37 @@ export default async function CatalogPage(props: CatalogPageProps) {
     }),
   ]);
 
+  const serializedCategories = categories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    isActive: c.isActive,
+  }));
+
+  const serializedProducts = products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    sku: p.sku,
+    barcode: p.barcode,
+    brand: p.brand,
+    imageUrl: p.imageUrl,
+    unit: p.unit,
+    costPrice: p.costPrice != null ? p.costPrice.toString() : "0.00",
+    sellingPrice: p.sellingPrice != null ? p.sellingPrice.toString() : "0.00",
+    isActive: p.isActive,
+    category: p.category ? { id: p.category.id, name: p.category.name } : null,
+    variants: p.variants.map((v) => ({
+      id: v.id,
+      name: v.name,
+      sku: v.sku,
+      barcode: v.barcode,
+      costPrice: v.costPrice != null ? v.costPrice.toString() : null,
+      sellingPrice: v.sellingPrice != null ? v.sellingPrice.toString() : null,
+      isActive: v.isActive,
+    })),
+  }));
+
   return (
     <AppShell
       organizationId={organization.id}
@@ -185,8 +216,8 @@ export default async function CatalogPage(props: CatalogPageProps) {
         currency={organization.currency || "PKR"}
         userRole={userRole}
         canMutate={canMutate}
-        categories={categories}
-        products={products}
+        categories={serializedCategories}
+        products={serializedProducts}
         currentSearch={searchParams.search}
         currentCategory={searchParams.category}
       />
