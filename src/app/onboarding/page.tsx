@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
+import { getDefaultRouteForRole } from "@/lib/invitation-claim";
 import { ThemeToggle } from "@/components/theme-provider";
 import { OnboardingForm } from "./onboarding-form";
 
@@ -9,6 +11,12 @@ export const metadata = {
 
 export default async function OnboardingPage() {
   const user = await requireAuth();
+
+  // If user already belongs to an organization, route to their authorized landing page
+  if (user.memberships.length > 0) {
+    const primary = user.memberships[0];
+    redirect(getDefaultRouteForRole(primary.role.name, primary.organizationId));
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 p-6 md:p-12 transition-colors relative">

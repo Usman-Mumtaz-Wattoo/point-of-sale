@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentAppUser } from "@/lib/auth";
+import { getDefaultRouteForRole } from "@/lib/invitation-claim";
 
 export interface AuthActionResult {
   error?: string;
@@ -16,6 +18,7 @@ export async function loginAction(
 ): Promise<AuthActionResult> {
   const email = formData.get("email")?.toString().trim();
   const password = formData.get("password")?.toString();
+  const redirectTo = formData.get("redirectTo")?.toString().trim();
 
   if (!email || !password) {
     return { error: "Email and password are required." };
@@ -31,6 +34,20 @@ export async function loginAction(
     return { error: error.message };
   }
 
+  // Load application user to resolve memberships and claim any pending invitations
+  const appUser = await getCurrentAppUser();
+
+  // Validate redirectTo path against open redirect vulnerabilities
+  if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+    redirect(redirectTo);
+  }
+
+  // Route staff directly to their authorized page
+  if (appUser && appUser.memberships.length > 0) {
+    const primaryMembership = appUser.memberships[0];
+    redirect(getDefaultRouteForRole(primaryMembership.role.name, primaryMembership.organizationId));
+  }
+
   redirect("/dashboard");
 }
 
@@ -42,6 +59,7 @@ export async function signupAction(
   const email = formData.get("email")?.toString().trim();
   const password = formData.get("password")?.toString();
   const passwordConfirmation = formData.get("passwordConfirmation")?.toString();
+  const redirectTo = formData.get("redirectTo")?.toString().trim();
 
   if (!name || !email || !password) {
     return { error: "Name, email, and password are required." };
@@ -58,13 +76,18 @@ export async function signupAction(
   const headerList = await headers();
   const origin = headerList.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+  const safeNext =
+    redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")
+      ? redirectTo
+      : "/dashboard";
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { name },
-      emailRedirectTo: `${origin}/auth/callback?next=/dashboard`,
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(safeNext)}`,
     },
   });
 
@@ -78,6 +101,18 @@ export async function signupAction(
       success: true,
       message: "Registration successful. Please check your email to verify your account.",
     };
+  }
+
+  // Load application user to resolve memberships and claim any pending invitations
+  const appUser = await getCurrentAppUser();
+
+  if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")) {
+    redirect(redirectTo);
+  }
+
+  if (appUser && appUser.memberships.length > 0) {
+    const primaryMembership = appUser.memberships[0];
+    redirect(getDefaultRouteForRole(primaryMembership.role.name, primaryMembership.organizationId));
   }
 
   redirect("/dashboard");

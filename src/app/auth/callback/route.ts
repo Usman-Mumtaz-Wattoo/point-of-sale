@@ -20,7 +20,19 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
-      return NextResponse.redirect(new URL(safeRedirectPath, requestUrl.origin));
+      let finalRedirectPath = safeRedirectPath;
+      try {
+        const { getCurrentAppUser } = await import("@/lib/auth");
+        const { getDefaultRouteForRole } = await import("@/lib/invitation-claim");
+        const appUser = await getCurrentAppUser();
+        if (appUser && appUser.memberships.length > 0 && safeRedirectPath === "/dashboard") {
+          const primary = appUser.memberships[0];
+          finalRedirectPath = getDefaultRouteForRole(primary.role.name, primary.organizationId);
+        }
+      } catch {
+        // Continue with safeRedirectPath
+      }
+      return NextResponse.redirect(new URL(finalRedirectPath, requestUrl.origin));
     }
   }
 

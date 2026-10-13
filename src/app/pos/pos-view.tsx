@@ -19,6 +19,8 @@ import {
   Receipt,
   Loader2,
   Tag,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { SalePaymentMethod } from "@prisma/client";
 import { CustomerSearchResultDTO } from "@/lib/customers";
@@ -89,6 +91,7 @@ export function PosView({
   const [tenderedAmount, setTenderedAmount] = useState<string>("");
   const [productSearch, setProductSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isPending, startTransition] = useTransition();
 
   const [checkoutResult, setCheckoutResult] = useState<CheckoutActionResult | null>(null);
@@ -267,16 +270,50 @@ export function PosView({
               </select>
             </div>
 
-            {/* Product Search */}
-            <div className="relative flex-1 sm:max-w-xs">
-              <input
-                type="text"
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="Search products, SKU..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2" />
+            {/* Search and View Mode Switcher */}
+            <div className="flex items-center gap-2 flex-1 sm:max-w-md justify-end">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="Search products, SKU..."
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2" />
+              </div>
+
+              {/* View Switcher: Grid vs Compact List */}
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                    viewMode === "grid"
+                      ? "bg-white dark:bg-[#0f172a] text-indigo-600 dark:text-indigo-400 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                  title="Grid View"
+                  aria-label="Grid View"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[11px]">Grid</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                    viewMode === "list"
+                      ? "bg-white dark:bg-[#0f172a] text-indigo-600 dark:text-indigo-400 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                  title="Compact List View"
+                  aria-label="Compact List View"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[11px]">List</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -351,7 +388,7 @@ export function PosView({
                 </button>
               )}
             </div>
-          ) : (
+          ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4">
               {filteredProducts.map((p) => {
                 const hasVariants = p.variants.length > 0;
@@ -426,6 +463,92 @@ export function PosView({
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Add to Cart</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* COMPACT LIST VIEW */
+            <div className="divide-y divide-slate-100 dark:divide-slate-800/80 -my-1">
+              {filteredProducts.map((p) => {
+                const hasVariants = p.variants.length > 0;
+                const imagePath = getProductImagePath(p.sku, p.name);
+
+                return (
+                  <div
+                    key={p.id}
+                    className="group py-2.5 px-2 sm:px-3 rounded-xl flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-[#0a0f1d] transition-colors"
+                  >
+                    {/* Left: Thumbnail & Details */}
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded-lg bg-white dark:bg-[#0f172a] border border-slate-200/60 dark:border-slate-800/60 flex items-center justify-center overflow-hidden shrink-0 p-1 group-hover:scale-105 transition-transform">
+                        <img
+                          src={imagePath}
+                          alt={p.name}
+                          className="w-full h-full object-contain"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = "/images/products/fallback-product.svg";
+                          }}
+                        />
+                      </div>
+
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-slate-900 dark:text-white text-xs truncate">
+                            {p.name}
+                          </h3>
+                          <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                            In Stock
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                          <span>{p.sku}</span>
+                          {hasVariants && (
+                            <span className="px-1.5 py-0.2 rounded font-sans text-[9px] font-medium bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20">
+                              {p.variants.length} variants
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Pricing & Add Action */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      {!hasVariants && (
+                        <div className="text-right">
+                          <div className="text-xs font-extrabold text-slate-900 dark:text-white">
+                            {formatMoney(p.sellingPrice, currency)}
+                          </div>
+                        </div>
+                      )}
+
+                      {hasVariants ? (
+                        <div className="flex flex-wrap items-center justify-end gap-1 max-w-[240px] sm:max-w-[320px]">
+                          {p.variants.map((v) => (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => addToCart(p, v)}
+                              className="px-2 py-1 text-[10px] font-semibold rounded-md bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer shadow-2xs"
+                              title={`Add ${v.name}`}
+                            >
+                              {v.name} ({formatMoney(v.sellingPrice ?? p.sellingPrice, currency)})
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => addToCart(p)}
+                          className="py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95"
+                          title="Add to Cart"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add</span>
                         </button>
                       )}
                     </div>

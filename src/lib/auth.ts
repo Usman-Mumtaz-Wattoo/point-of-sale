@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 import { createClient } from "./supabase/server";
 import { db } from "./db";
+import { claimPendingInvitationsForUser } from "./invitation-claim";
 
 /**
  * Retrieves the currently authenticated Supabase Auth user.
@@ -66,10 +67,37 @@ export async function getCurrentAppUser() {
     },
   });
 
-  if (existingAppUser) {
+    if (existingAppUser) {
     if (!existingAppUser.isActive) {
       return null; // Inactive / disabled account
     }
+
+    // Immediately resolve and claim any pending organization invitations for this verified user
+    if (existingAppUser.memberships.length === 0) {
+      const claimed = await claimPendingInvitationsForUser(existingAppUser);
+      if (claimed.length > 0) {
+        const reloadedUser = await db.user.findUnique({
+          where: { id: existingAppUser.id },
+          include: {
+            memberships: {
+              include: {
+                organization: true,
+                role: true,
+                branchMemberships: {
+                  include: {
+                    branch: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+        if (reloadedUser && reloadedUser.isActive) {
+          return reloadedUser;
+        }
+      }
+    }
+
     return existingAppUser;
   }
 
@@ -79,6 +107,31 @@ export async function getCurrentAppUser() {
   });
 
   if (existingEmailUser) {
+    // If the account has no supabaseAuthId and auth email is confirmed, safely link it
+    if (!existingEmailUser.supabaseAuthId && authUser.email_confirmed_at) {
+      await db.user.update({
+        where: { id: existingEmailUser.id },
+        data: { supabaseAuthId: authUser.id },
+      });
+      await claimPendingInvitationsForUser(existingEmailUser);
+      return db.user.findUnique({
+        where: { id: existingEmailUser.id },
+        include: {
+          memberships: {
+            include: {
+              organization: true,
+              role: true,
+              branchMemberships: {
+                include: {
+                  branch: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
     // SECURITY RESTRICTION:
     // Email matching alone is NOT sufficient authorization for account linking.
     // Automatic linking is strictly forbidden here to prevent account takeover risks.
@@ -116,6 +169,30 @@ export async function getCurrentAppUser() {
         },
       },
     });
+
+    // Immediately resolve and claim any pending invitations for the newly provisioned user
+    const claimed = await claimPendingInvitationsForUser(newUser);
+    if (claimed.length > 0) {
+      const reloadedNewUser = await db.user.findUnique({
+        where: { id: newUser.id },
+        include: {
+          memberships: {
+            include: {
+              organization: true,
+              role: true,
+              branchMemberships: {
+                include: {
+                  branch: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (reloadedNewUser && reloadedNewUser.isActive) {
+        return reloadedNewUser;
+      }
+    }
 
     return newUser;
   } catch (error) {

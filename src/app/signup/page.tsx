@@ -1,12 +1,17 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { Suspense, useActionState, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { signupAction, type AuthActionResult } from "@/app/auth/actions";
 import { AuthLayout } from "@/components/auth-layout";
 import { Eye, EyeOff } from "lucide-react";
 
-export default function SignupPage() {
+function SignupForm() {
+  const searchParams = useSearchParams();
+  const defaultEmail = searchParams.get("email") || "";
+  const redirectTo = searchParams.get("redirectTo") || "";
+
   const [state, formAction, isPending] = useActionState<AuthActionResult | null, FormData>(
     signupAction,
     null
@@ -22,7 +27,7 @@ export default function SignupPage() {
         <p className="text-white/80">
           Already have an account?{" "}
           <Link
-            href="/login"
+            href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : "/login"}
             className="text-white font-semibold hover:underline drop-shadow-xs"
           >
             Sign in
@@ -43,6 +48,9 @@ export default function SignupPage() {
       )}
 
       <form action={formAction} className="space-y-3">
+        {/* Hidden redirectTo preserved for invitation flows */}
+        {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+
         {/* Full Name */}
         <div className="space-y-1">
           <label
@@ -75,6 +83,7 @@ export default function SignupPage() {
             name="email"
             type="email"
             required
+            defaultValue={defaultEmail}
             autoComplete="email"
             className="w-full px-3.5 py-2.5 bg-white text-slate-900 placeholder:text-slate-400 rounded-lg text-sm font-medium shadow-xs focus:outline-none focus:ring-2 focus:ring-sky-300 transition-all border-0"
             placeholder="username@gmail.com"
@@ -150,9 +159,17 @@ export default function SignupPage() {
           {isPending && (
             <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           )}
-          <span>{isPending ? "Creating account..." : "Sign up"}</span>
+          <span>{isPending ? "Creating account..." : "Sign Up"}</span>
         </button>
       </form>
     </AuthLayout>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#080d1a]" />}>
+      <SignupForm />
+    </Suspense>
   );
 }

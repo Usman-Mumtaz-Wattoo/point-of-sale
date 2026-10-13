@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAppUser, getCurrentAuthUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { SYSTEM_ROLES, type SystemRoleName } from "@/lib/roles";
+import { getDefaultRouteForRole } from "@/lib/invitation-claim";
 import {
   ASSIGNABLE_STAFF_ROLES,
   type StaffMemberDTO,
@@ -896,7 +897,7 @@ export async function getPublicInvitationAction(
  */
 export async function acceptInvitationAction(
   token: string
-): Promise<StaffActionResult<{ organizationId: string }>> {
+): Promise<StaffActionResult<{ organizationId: string; roleName?: string; redirectUrl?: string }>> {
   try {
     // 1. Authoritative Supabase Auth user verification
     const authUser = await getCurrentAuthUser();
@@ -950,6 +951,24 @@ export async function acceptInvitationAction(
       }
 
       if (invitation.status !== "PENDING") {
+        // Idempotency: If already accepted and user is an active member, return success
+        if (invitation.status === "ACCEPTED") {
+          const existingMem = await tx.organizationMembership.findUnique({
+            where: {
+              userId_organizationId: {
+                userId: user.id,
+                organizationId: invitation.organizationId,
+              },
+            },
+            include: { role: true },
+          });
+          if (existingMem && existingMem.isActive) {
+            return {
+              organizationId: invitation.organizationId,
+              roleName: existingMem.role.name,
+            };
+          }
+        }
         throw new Error(`INVITATION_ALREADY_${invitation.status}`);
       }
 
@@ -1046,15 +1065,25 @@ export async function acceptInvitationAction(
         }
       }
 
-      return { organizationId: invitation.organizationId };
+      return {
+        organizationId: invitation.organizationId,
+        roleName: invitation.role.name,
+      };
     });
 
     revalidatePath("/dashboard");
     revalidatePath("/settings/staff");
+    revalidatePath("/pos");
+
+    const redirectUrl = getDefaultRouteForRole(result.roleName, result.organizationId);
 
     return {
       success: true,
-      data: result,
+      data: {
+        organizationId: result.organizationId,
+        roleName: result.roleName,
+        redirectUrl,
+      },
       message: "Invitation accepted successfully! Welcome to the team.",
     };
   } catch (error: unknown) {

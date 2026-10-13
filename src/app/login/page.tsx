@@ -1,12 +1,17 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { Suspense, useActionState, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { loginAction, type AuthActionResult } from "@/app/auth/actions";
 import { AuthLayout } from "@/components/auth-layout";
 import { Eye, EyeOff } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const defaultEmail = searchParams.get("email") || "";
+  const redirectTo = searchParams.get("redirectTo") || "";
+
   const [state, formAction, isPending] = useActionState<AuthActionResult | null, FormData>(
     loginAction,
     null
@@ -20,7 +25,7 @@ export default function LoginPage() {
         <p className="text-white/80">
           Don&apos;t have an account?{" "}
           <Link
-            href="/signup"
+            href={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}
             className="text-white font-semibold hover:underline drop-shadow-xs"
           >
             Sign up
@@ -35,6 +40,9 @@ export default function LoginPage() {
       )}
 
       <form action={formAction} className="space-y-3.5">
+        {/* Hidden redirectTo preserved for invitation flows */}
+        {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+
         {/* Email Field */}
         <div className="space-y-1">
           <label
@@ -48,6 +56,7 @@ export default function LoginPage() {
             name="email"
             type="email"
             required
+            defaultValue={defaultEmail}
             autoComplete="email"
             className="w-full px-3.5 py-2.5 bg-white text-slate-900 placeholder:text-slate-400 rounded-lg text-sm font-medium shadow-xs focus:outline-none focus:ring-2 focus:ring-sky-300 transition-all border-0"
             placeholder="username@gmail.com"
@@ -104,5 +113,13 @@ export default function LoginPage() {
         </button>
       </form>
     </AuthLayout>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#080d1a]" />}>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
+import { claimPendingInvitationsForUser } from "@/lib/invitation-claim";
 import { resolveTenantContext, TenantContextError } from "@/lib/tenant-context";
 import { getDashboardMetricsAction } from "./actions";
 import { DASHBOARD_ALLOWED_ROLES } from "./types";
@@ -21,8 +23,12 @@ export default async function DashboardPage(props: DashboardPageProps) {
   const user = await requireAuth();
   const searchParams = await props.searchParams;
 
-  // Zero-organization handling
+  // Zero-organization handling: Verify if any pending invitation can be authoritatively claimed
   if (user.memberships.length === 0) {
+    const claimed = await claimPendingInvitationsForUser(user);
+    if (claimed.length > 0) {
+      redirect(claimed[0].redirectUrl);
+    }
     return (
       <main className="min-h-screen bg-slate-50 dark:bg-[#080d1a] text-slate-900 dark:text-slate-100 p-6 md:p-12 flex items-center justify-center">
         <div className="max-w-md w-full text-center bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 rounded-2xl p-8 space-y-4 shadow-xl">
