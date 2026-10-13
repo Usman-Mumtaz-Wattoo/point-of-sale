@@ -241,6 +241,7 @@ model Product {
   sku                String
   barcode            String?
   brand              String?
+  imageUrl           String?
   unit               String              @default("piece")
   costPrice          Decimal             @default(0.00) @db.Decimal(12, 2)
   sellingPrice       Decimal             @default(0.00) @db.Decimal(12, 2)

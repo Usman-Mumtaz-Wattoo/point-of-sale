@@ -10,6 +10,7 @@ import {
   type CatalogActionResult,
 } from "./actions";
 import { formatMoney } from "@/lib/currency";
+import { getProductImagePath, DEFAULT_PRODUCT_FALLBACK_IMAGE } from "@/lib/product-images";
 
 interface CategoryItem {
   id: string;
@@ -35,6 +36,7 @@ interface ProductItem {
   sku: string;
   barcode: string | null;
   brand: string | null;
+  imageUrl?: string | null;
   unit: string;
   costPrice: unknown;
   sellingPrice: unknown;
@@ -42,6 +44,24 @@ interface ProductItem {
   category: { id: string; name: string } | null;
   variants: ProductVariantItem[];
 }
+
+const PRODUCT_IMAGE_PRESETS = [
+  { label: "Apples", path: "/images/products/prd-app-001.svg" },
+  { label: "Bananas", path: "/images/products/prd-ban-001.svg" },
+  { label: "Spinach", path: "/images/products/prd-spn-001.svg" },
+  { label: "Citrus", path: "/images/products/prd-kin-001.svg" },
+  { label: "Sourdough", path: "/images/products/bak-srd-001.svg" },
+  { label: "Croissant", path: "/images/products/bak-crs-001.svg" },
+  { label: "Bread", path: "/images/products/bak-brd-001.svg" },
+  { label: "Rice", path: "/images/products/pnt-ric-001.svg" },
+  { label: "Olive Oil", path: "/images/products/pnt-oil-001.svg" },
+  { label: "Pink Salt", path: "/images/products/pnt-slt-001.svg" },
+  { label: "Honey", path: "/images/products/pnt-hny-001.svg" },
+  { label: "Milk", path: "/images/products/dar-mlk-001.svg" },
+  { label: "Yogurt", path: "/images/products/dar-ygt-001.svg" },
+  { label: "Orange Juice", path: "/images/products/dar-ojc-001.svg" },
+  { label: "Butter", path: "/images/products/dar-btr-001.svg" },
+];
 
 export function CatalogView({
   organizationId,
@@ -65,6 +85,7 @@ export function CatalogView({
   currentCategory?: string;
 }) {
   const [showProductModal, setShowProductModal] = useState(false);
+  const [productImageUrl, setProductImageUrl] = useState("");
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedProductForVariant, setSelectedProductForVariant] = useState<ProductItem | null>(null);
   const [confirmDeactivateProduct, setConfirmDeactivateProduct] = useState<ProductItem | null>(null);
@@ -229,8 +250,22 @@ export function CatalogView({
                 {products.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
                     <td className="p-3.5 font-sans font-semibold text-slate-900 dark:text-white">
-                      <div>{p.name}</div>
-                      {p.brand && <span className="text-[10px] text-slate-400 font-normal">{p.brand}</span>}
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center p-0.5">
+                          <img
+                            src={getProductImagePath(p.sku, p.name, p.imageUrl)}
+                            alt={p.name}
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = DEFAULT_PRODUCT_FALLBACK_IMAGE;
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <div>{p.name}</div>
+                          {p.brand && <span className="text-[10px] text-slate-400 font-normal">{p.brand}</span>}
+                        </div>
+                      </div>
                     </td>
                     <td className="p-3.5 text-indigo-600 dark:text-indigo-400 font-bold">{p.sku}</td>
                     <td className="p-3.5 font-sans">
@@ -386,7 +421,10 @@ export function CatalogView({
             <div className="flex justify-between items-center">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">Create New Product</h3>
               <button
-                onClick={() => setShowProductModal(false)}
+                onClick={() => {
+                  setShowProductModal(false);
+                  setProductImageUrl("");
+                }}
                 className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg"
               >
                 <X className="w-5 h-5" />
@@ -397,6 +435,7 @@ export function CatalogView({
               action={async (formData) => {
                 await productFormAction(formData);
                 setShowProductModal(false);
+                setProductImageUrl("");
               }}
               className="space-y-4"
             >
@@ -517,6 +556,70 @@ export function CatalogView({
                 </div>
               </div>
 
+              {/* Product Image Selection & Live Preview */}
+              <div className="space-y-2 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Product Image (Manual URL or Preset)
+                  </label>
+                  {productImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setProductImageUrl("")}
+                      className="text-[10px] text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {/* Live Thumbnail Preview */}
+                  <div className="w-16 h-16 rounded-xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center p-1 overflow-hidden">
+                    <img
+                      src={productImageUrl.trim() ? productImageUrl.trim() : DEFAULT_PRODUCT_FALLBACK_IMAGE}
+                      alt="Product preview"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = DEFAULT_PRODUCT_FALLBACK_IMAGE;
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex-1 space-y-1">
+                    <input
+                      name="imageUrl"
+                      type="text"
+                      value={productImageUrl}
+                      onChange={(e) => setProductImageUrl(e.target.value)}
+                      placeholder="Paste image URL (e.g. https://... or select below)"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Enter any image URL or click one of the quick presets below:
+                    </p>
+                  </div>
+                </div>
+
+                {/* Preset Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {PRODUCT_IMAGE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.path}
+                      type="button"
+                      onClick={() => setProductImageUrl(preset.path)}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+                        productImageUrl === preset.path
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400"
+                      }`}
+                    >
+                      <span>{preset.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Description
@@ -532,7 +635,10 @@ export function CatalogView({
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowProductModal(false)}
+                  onClick={() => {
+                    setShowProductModal(false);
+                    setProductImageUrl("");
+                  }}
                   className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white"
                 >
                   Cancel

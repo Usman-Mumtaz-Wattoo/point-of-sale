@@ -31,10 +31,18 @@ export const PRODUCT_IMAGE_MAP: Record<string, string> = {
 export const DEFAULT_PRODUCT_FALLBACK_IMAGE = "/images/products/fallback-product.svg";
 
 /**
- * Resolves the image path for a product based on its SKU or name.
- * Always returns a valid, locally hosted image path.
+ * Resolves the image path for a product based on its custom imageUrl, SKU, or name.
+ * Always returns a valid image path.
  */
-export function getProductImagePath(sku?: string | null, name?: string | null): string {
+export function getProductImagePath(
+  sku?: string | null,
+  name?: string | null,
+  customImageUrl?: string | null
+): string {
+  if (customImageUrl && customImageUrl.trim()) {
+    return customImageUrl.trim();
+  }
+
   if (sku && PRODUCT_IMAGE_MAP[sku]) {
     return PRODUCT_IMAGE_MAP[sku];
   }

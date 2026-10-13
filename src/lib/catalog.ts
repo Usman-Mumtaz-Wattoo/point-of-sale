@@ -266,6 +266,7 @@ export interface CreateProductInput {
   sku: string;
   barcode?: string | null;
   brand?: string | null;
+  imageUrl?: string | null;
   unit?: string;
   costPrice?: number | string;
   sellingPrice: number | string;
@@ -299,6 +300,8 @@ export async function createProduct(input: CreateProductInput) {
   if (brand && brand.length > 60) {
     throw new CatalogValidationError("Brand cannot exceed 60 characters.");
   }
+
+  const imageUrl = input.imageUrl?.trim() || null;
 
   const unit = input.unit?.trim().toLowerCase() || "piece";
   if (!unit || unit.length > 20) {
@@ -383,6 +386,7 @@ export async function createProduct(input: CreateProductInput) {
         sku,
         barcode,
         brand,
+        imageUrl,
         unit,
         costPrice,
         sellingPrice,
@@ -416,6 +420,7 @@ export interface UpdateProductInput {
   sku?: string;
   barcode?: string | null;
   brand?: string | null;
+  imageUrl?: string | null;
   unit?: string;
   costPrice?: number | string;
   sellingPrice?: number | string;
@@ -547,6 +552,7 @@ export async function updateProduct(input: UpdateProductInput) {
         sku,
         barcode,
         brand: input.brand !== undefined ? (input.brand?.trim() || null) : product.brand,
+        imageUrl: input.imageUrl !== undefined ? (input.imageUrl?.trim() || null) : product.imageUrl,
         unit: input.unit !== undefined ? (input.unit?.trim().toLowerCase() || "piece") : product.unit,
         costPrice,
         sellingPrice,

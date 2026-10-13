@@ -15,6 +15,7 @@ export const metadata = {
 interface PosPageProps {
   searchParams: Promise<{
     org?: string;
+    branch?: string;
   }>;
 }
 
@@ -214,8 +215,9 @@ export default async function PosPage(props: PosPageProps) {
     );
   }
 
-  // Fetch active categories and active products with active variants
-  const [categories, products] = await Promise.all([
+  // Fetch active categories, active products with active variants, and inventory stock
+  const branchIds = branches.map((b) => b.id);
+  const [categories, products, stockRecords] = await Promise.all([
     db.category.findMany({
       where: { organizationId: organization.id, isActive: true },
       select: { id: true, name: true },
@@ -227,6 +229,7 @@ export default async function PosPage(props: PosPageProps) {
         id: true,
         name: true,
         sku: true,
+        imageUrl: true,
         categoryId: true,
         sellingPrice: true,
         variants: {
@@ -241,12 +244,52 @@ export default async function PosPage(props: PosPageProps) {
       },
       orderBy: { name: "asc" },
     }),
+    db.inventoryStock.findMany({
+      where: {
+        organizationId: organization.id,
+        branchId: { in: branchIds },
+      },
+      select: {
+        branchId: true,
+        productId: true,
+        variantId: true,
+        quantity: true,
+      },
+    }),
   ]);
+
+  // Build branchStockMap:
+  // branchStockMap[branchId][productId] = total quantity
+  // branchStockMap[branchId][`${productId}:${variantId}`] = variant quantity
+  const branchStockMap: Record<string, Record<string, number>> = {};
+  for (const bId of branchIds) {
+    branchStockMap[bId] = {};
+  }
+  for (const s of stockRecords) {
+    if (!branchStockMap[s.branchId]) {
+      branchStockMap[s.branchId] = {};
+    }
+    const qty = Number(s.quantity);
+    if (s.variantId) {
+      branchStockMap[s.branchId][`${s.productId}:${s.variantId}`] = qty;
+      branchStockMap[s.branchId][s.variantId] = qty;
+      branchStockMap[s.branchId][s.productId] =
+        (branchStockMap[s.branchId][s.productId] || 0) + qty;
+    } else {
+      branchStockMap[s.branchId][s.productId] = qty;
+    }
+  }
+
+  const initialBranchId =
+    searchParams.branch && branches.some((b) => b.id === searchParams.branch)
+      ? searchParams.branch
+      : branches[0]?.id || "";
 
   const formattedProducts = products.map((p) => ({
     id: p.id,
     name: p.name,
     sku: p.sku,
+    imageUrl: p.imageUrl,
     categoryId: p.categoryId,
     sellingPrice: p.sellingPrice.toString(),
     variants: p.variants.map((v) => ({
@@ -276,6 +319,8 @@ export default async function PosPage(props: PosPageProps) {
         currency={organization.currency || "PKR"}
         userRole={userRole}
         branches={branches}
+        initialBranchId={initialBranchId}
+        branchStockMap={branchStockMap}
         categories={categories}
         products={formattedProducts}
       />

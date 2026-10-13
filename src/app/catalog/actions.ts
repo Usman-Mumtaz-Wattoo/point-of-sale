@@ -106,6 +106,7 @@ export async function createProductAction(
   const sku = formData.get("sku")?.toString() || "";
   const barcode = formData.get("barcode")?.toString() || null;
   const brand = formData.get("brand")?.toString() || null;
+  const imageUrl = formData.get("imageUrl")?.toString()?.trim() || null;
   const unit = formData.get("unit")?.toString() || "piece";
   const costPrice = formData.get("costPrice")?.toString() || "0";
   const sellingPrice = formData.get("sellingPrice")?.toString() || "0";
@@ -119,12 +120,14 @@ export async function createProductAction(
       sku,
       barcode: barcode === "" ? null : barcode,
       brand,
+      imageUrl,
       unit,
       costPrice,
       sellingPrice,
       actorUser: options?.actorUser,
     });
     revalidatePath("/catalog");
+    revalidatePath("/pos");
     return { success: true, message: `Product "${name}" created successfully.` };
   } catch (err: unknown) {
     return { error: formatCatalogActionError(err, "Failed to create product.") };
@@ -144,6 +147,7 @@ export async function updateProductAction(
   const sku = formData.get("sku")?.toString();
   const barcode = formData.get("barcode")?.toString();
   const brand = formData.get("brand")?.toString();
+  const imageUrl = formData.get("imageUrl") !== null ? (formData.get("imageUrl")?.toString()?.trim() || null) : undefined;
   const unit = formData.get("unit")?.toString();
   const costPrice = formData.get("costPrice")?.toString();
   const sellingPrice = formData.get("sellingPrice")?.toString();
@@ -159,6 +163,7 @@ export async function updateProductAction(
       sku,
       barcode: barcode === "" ? null : barcode,
       brand,
+      imageUrl,
       unit,
       costPrice,
       sellingPrice,
@@ -166,6 +171,7 @@ export async function updateProductAction(
       actorUser: options?.actorUser,
     });
     revalidatePath("/catalog");
+    revalidatePath("/pos");
     return { success: true, message: "Product updated successfully." };
   } catch (err: unknown) {
     return { error: formatCatalogActionError(err, "Failed to update product.") };

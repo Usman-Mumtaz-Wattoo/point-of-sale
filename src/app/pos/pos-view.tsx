@@ -47,6 +47,7 @@ interface ProductOption {
   id: string;
   name: string;
   sku: string;
+  imageUrl?: string | null;
   categoryId?: string | null;
   sellingPrice: string | number;
   variants: Array<{
@@ -72,6 +73,8 @@ interface PosViewProps {
   currency?: string;
   userRole: string;
   branches: BranchOption[];
+  initialBranchId?: string;
+  branchStockMap?: Record<string, Record<string, number>>;
   categories?: CategoryOption[];
   products: ProductOption[];
 }
@@ -81,10 +84,17 @@ export function PosView({
   organizationName,
   currency = "PKR",
   branches,
+  initialBranchId,
+  branchStockMap = {},
   categories = [],
   products,
 }: PosViewProps) {
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0]?.id || "");
+  const [selectedBranchId, setSelectedBranchId] = useState(
+    initialBranchId && branches.some((b) => b.id === initialBranchId)
+      ? initialBranchId
+      : branches[0]?.id || ""
+  );
+  const [onlyInStock, setOnlyInStock] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResultDTO | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>(SalePaymentMethod.CASH);
@@ -100,6 +110,15 @@ export function PosView({
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
 
+  // Stock lookup for the selected branch
+  const getProductStock = (productId: string, variantId?: string | null): number => {
+    const branchStocks = branchStockMap[selectedBranchId] || {};
+    if (variantId) {
+      return branchStocks[`${productId}:${variantId}`] ?? branchStocks[variantId] ?? 0;
+    }
+    return branchStocks[productId] ?? 0;
+  };
+
   // Authoritative FBR & PRA Financial Rules:
   // - CASH: 16% FBR Sales Tax
   // - CARD: 8% FBR Sales Tax (digital incentive, alternative NOT additive)
@@ -114,6 +133,11 @@ export function PosView({
   const addToCart = (product: ProductOption, variant?: ProductOption["variants"][0]) => {
     const productId = product.id;
     const variantId = variant ? variant.id : null;
+    const currentStock = getProductStock(productId, variantId);
+    if (currentStock <= 0) {
+      return;
+    }
+
     const name = variant ? `${product.name} (${variant.name})` : product.name;
     const sku = variant ? variant.sku || product.sku : product.sku;
     const priceNum =
@@ -126,6 +150,9 @@ export function PosView({
         (i) => i.productId === productId && i.variantId === variantId
       );
       if (existingIndex >= 0) {
+        if (prev[existingIndex].quantity >= currentStock) {
+          return prev;
+        }
         const copy = [...prev];
         copy[existingIndex].quantity += 1;
         return copy;
@@ -137,9 +164,14 @@ export function PosView({
   const updateQuantity = (index: number, delta: number) => {
     setCart((prev) => {
       const copy = [...prev];
-      const newQty = copy[index].quantity + delta;
+      const item = copy[index];
+      const currentStock = getProductStock(item.productId, item.variantId);
+      const newQty = item.quantity + delta;
       if (newQty <= 0) {
         return copy.filter((_, i) => i !== index);
+      }
+      if (newQty > currentStock) {
+        return prev;
       }
       copy[index].quantity = newQty;
       return copy;
@@ -221,8 +253,13 @@ export function PosView({
     }
   };
 
-  // Filter products by selected category and search term
+  // Filter products by selected branch stock, category, and search term
   const filteredProducts = products.filter((p) => {
+    // In-stock at selected branch filter
+    if (onlyInStock && getProductStock(p.id) <= 0) {
+      return false;
+    }
+
     // Category filter
     if (selectedCategoryId && p.categoryId !== selectedCategoryId) {
       return false;
@@ -259,7 +296,15 @@ export function PosView({
               </label>
               <select
                 value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
+                onChange={(e) => {
+                  const newBranchId = e.target.value;
+                  setSelectedBranchId(newBranchId);
+                  if (typeof window !== "undefined") {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("branch", newBranchId);
+                    window.history.replaceState({}, "", url.toString());
+                  }
+                }}
                 className="px-3 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
               >
                 {branches.map((b) => (
@@ -282,6 +327,22 @@ export function PosView({
                 />
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2" />
               </div>
+
+              {/* In-Stock Filter Toggle */}
+              <button
+                type="button"
+                onClick={() => setOnlyInStock(!onlyInStock)}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border shrink-0 ${
+                  onlyInStock
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
+                title="Filter products with stock > 0 at selected branch"
+                aria-label="In Stock Only"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px]">In Stock Only</span>
+              </button>
 
               {/* View Switcher: Grid vs Compact List */}
               <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
@@ -330,11 +391,17 @@ export function PosView({
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>All Items ({products.length})</span>
+                <span>
+                  All Items ({onlyInStock ? products.filter((p) => getProductStock(p.id) > 0).length : products.length})
+                </span>
               </button>
 
               {categories.map((cat) => {
-                const count = products.filter((p) => p.categoryId === cat.id).length;
+                const count = products.filter((p) => {
+                  if (p.categoryId !== cat.id) return false;
+                  if (onlyInStock && getProductStock(p.id) <= 0) return false;
+                  return true;
+                }).length;
                 const isSelected = selectedCategoryId === cat.id;
                 return (
                   <button
@@ -392,7 +459,9 @@ export function PosView({
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4">
               {filteredProducts.map((p) => {
                 const hasVariants = p.variants.length > 0;
-                const imagePath = getProductImagePath(p.sku, p.name);
+                const stock = getProductStock(p.id);
+                const isOutOfStock = stock <= 0;
+                const imagePath = getProductImagePath(p.sku, p.name, p.imageUrl);
 
                 return (
                   <div
@@ -415,9 +484,15 @@ export function PosView({
 
                       {/* Stock Pill Badge */}
                       <div className="flex items-center justify-between gap-1 mb-1.5">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                          In Stock
-                        </span>
+                        {stock > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            {stock} in stock
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            Out of Stock (0)
+                          </span>
+                        )}
                         <span className="text-[10px] font-mono text-slate-400 truncate">
                           {p.sku}
                         </span>
@@ -443,26 +518,42 @@ export function PosView({
                             Variants:
                           </span>
                           <div className="flex flex-wrap gap-1.5">
-                            {p.variants.map((v) => (
-                              <button
-                                key={v.id}
-                                type="button"
-                                onClick={() => addToCart(p, v)}
-                                className="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
-                              >
-                                {v.name} ({formatMoney(v.sellingPrice ?? p.sellingPrice, currency)})
-                              </button>
-                            ))}
+                            {p.variants.map((v) => {
+                              const vStock = getProductStock(p.id, v.id);
+                              const isVOut = vStock <= 0;
+                              return (
+                                <button
+                                  key={v.id}
+                                  type="button"
+                                  disabled={isVOut}
+                                  onClick={() => addToCart(p, v)}
+                                  className={`px-2.5 py-1 text-[10px] font-semibold rounded-lg transition-colors border ${
+                                    isVOut
+                                      ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
+                                      : "bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 cursor-pointer"
+                                  }`}
+                                  title={isVOut ? `${v.name} is out of stock` : `Add ${v.name} (${vStock} available)`}
+                                >
+                                  {v.name} ({formatMoney(v.sellingPrice ?? p.sellingPrice, currency)})
+                                  <span className="ml-1 text-[9px] opacity-75">{isVOut ? "• Out" : `• ${vStock}`}</span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       ) : (
                         <button
                           type="button"
+                          disabled={isOutOfStock}
                           onClick={() => addToCart(p)}
-                          className="w-full py-2 px-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                          className={`w-full py-2 px-3 rounded-xl font-semibold text-xs transition-colors border flex items-center justify-center gap-1.5 shadow-2xs ${
+                            isOutOfStock
+                              ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
+                              : "bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 cursor-pointer"
+                          }`}
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add to Cart</span>
+                          <span>{isOutOfStock ? "Out of Stock" : "Add to Cart"}</span>
                         </button>
                       )}
                     </div>
@@ -475,7 +566,9 @@ export function PosView({
             <div className="divide-y divide-slate-100 dark:divide-slate-800/80 -my-1">
               {filteredProducts.map((p) => {
                 const hasVariants = p.variants.length > 0;
-                const imagePath = getProductImagePath(p.sku, p.name);
+                const stock = getProductStock(p.id);
+                const isOutOfStock = stock <= 0;
+                const imagePath = getProductImagePath(p.sku, p.name, p.imageUrl);
 
                 return (
                   <div
@@ -501,9 +594,15 @@ export function PosView({
                           <h3 className="font-semibold text-slate-900 dark:text-white text-xs truncate">
                             {p.name}
                           </h3>
-                          <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-                            In Stock
-                          </span>
+                          {stock > 0 ? (
+                            <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                              {stock} in stock
+                            </span>
+                          ) : (
+                            <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0">
+                              Out of Stock (0)
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
                           <span>{p.sku}</span>
@@ -528,27 +627,42 @@ export function PosView({
 
                       {hasVariants ? (
                         <div className="flex flex-wrap items-center justify-end gap-1 max-w-[240px] sm:max-w-[320px]">
-                          {p.variants.map((v) => (
-                            <button
-                              key={v.id}
-                              type="button"
-                              onClick={() => addToCart(p, v)}
-                              className="px-2 py-1 text-[10px] font-semibold rounded-md bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer shadow-2xs"
-                              title={`Add ${v.name}`}
-                            >
-                              {v.name} ({formatMoney(v.sellingPrice ?? p.sellingPrice, currency)})
-                            </button>
-                          ))}
+                          {p.variants.map((v) => {
+                            const vStock = getProductStock(p.id, v.id);
+                            const isVOut = vStock <= 0;
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                disabled={isVOut}
+                                onClick={() => addToCart(p, v)}
+                                className={`px-2 py-1 text-[10px] font-semibold rounded-md transition-colors border shadow-2xs ${
+                                  isVOut
+                                    ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700"
+                                    : "bg-white dark:bg-slate-800 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 cursor-pointer"
+                                }`}
+                                title={isVOut ? `${v.name} is out of stock` : `Add ${v.name} (${vStock} in stock)`}
+                              >
+                                {v.name} ({formatMoney(v.sellingPrice ?? p.sellingPrice, currency)})
+                                <span className="ml-1 text-[9px] opacity-75">{isVOut ? "• Out" : `• ${vStock}`}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       ) : (
                         <button
                           type="button"
+                          disabled={isOutOfStock}
                           onClick={() => addToCart(p)}
-                          className="py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95"
-                          title="Add to Cart"
+                          className={`py-1.5 px-3 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1 shadow-2xs ${
+                            isOutOfStock
+                              ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700"
+                              : "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer active:scale-95"
+                          }`}
+                          title={isOutOfStock ? "Out of Stock at this branch" : "Add to Cart"}
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add</span>
+                          <span>{isOutOfStock ? "Out" : "Add"}</span>
                         </button>
                       )}
                     </div>
