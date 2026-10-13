@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "jiti src/lib/tax.test.ts && jiti src/lib/invitation-lifecycle.test.ts"
+    "test": "jiti src/lib/tax.test.ts && jiti src/lib/invitation-lifecycle.test.ts && node scripts/test-settings.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

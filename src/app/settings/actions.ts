@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { resolveOwnerTenantContext, TenantContextError } from "@/lib/tenant-context";
+import {
+  resolveOwnerTenantContext,
+  TenantContextError,
+  type TenantUserContext,
+} from "@/lib/tenant-context";
 import {
   type OrganizationProfileDTO,
   type UpdateOrganizationProfileInput,
@@ -10,37 +14,7 @@ import {
   SUPPORTED_CURRENCIES,
 } from "./types";
 
-/**
- * Validates whether a given string is a valid IANA timezone identifier.
- */
-function isValidIanaTimezone(tz: string): boolean {
-  if (!tz || typeof tz !== "string" || tz.length > 60) {
-    return false;
-  }
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Validates whether a given URL is a safe HTTP or HTTPS URL for images.
- * Disallows javascript:, data:, file:, and malformed URIs.
- * Note: Server never fetches this URL.
- */
-function isValidSafeLogoUrl(rawUrl: string): boolean {
-  if (rawUrl.length > 500) {
-    return false;
-  }
-  try {
-    const parsed = new URL(rawUrl);
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
-  } catch {
-    return false;
-  }
-}
+import { isValidIanaTimezone, isValidSafeLogoUrl } from "./validation";
 
 /**
  * Retrieves organization profile settings for the authenticated owner.
@@ -48,10 +22,11 @@ function isValidSafeLogoUrl(rawUrl: string): boolean {
  * If omitted, falls back to the user's sole active owned organization if unique.
  */
 export async function getOrganizationSettingsAction(
-  requestedOrgId?: string
+  requestedOrgId?: string,
+  options?: { actorUser?: TenantUserContext | null }
 ): Promise<OrganizationSettingsActionResult<OrganizationProfileDTO>> {
   try {
-    const { organizationId } = await resolveOwnerTenantContext(requestedOrgId);
+    const { organizationId } = await resolveOwnerTenantContext(requestedOrgId, options);
 
     const org = await db.organization.findUnique({
       where: { id: organizationId },
@@ -147,10 +122,11 @@ export async function getOrganizationSettingsAction(
  */
 export async function updateOrganizationProfileAction(
   input: UpdateOrganizationProfileInput,
-  requestedOrgId?: string
+  requestedOrgId?: string,
+  options?: { actorUser?: TenantUserContext | null }
 ): Promise<OrganizationSettingsActionResult<OrganizationProfileDTO>> {
   try {
-    const { organizationId } = await resolveOwnerTenantContext(requestedOrgId);
+    const { organizationId } = await resolveOwnerTenantContext(requestedOrgId, options);
 
     const fieldErrors: Record<string, string> = {};
 
